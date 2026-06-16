@@ -27,10 +27,12 @@ We utilize two primary public repositories of cancer genomics:
    - **Type**: Microarray data (Affymetrix U133Plus2 platform)
    - **Samples**: ~585 colon cancer tissues
    - **Metadata**: Patient age, sex, tumor stage, molecular subtypes, and survival outcomes.
+   - **Download/Access**: [NCBI GSE39582 Portal](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE39582)
 2. **TCGA-COAD (The Cancer Genome Atlas - Colon Adenocarcinoma)**:
    - **Type**: RNA-seq gene expression quantification (STAR-counts)
    - **Samples**: ~480 patient samples
    - **Metadata**: Harmonized demographics and staging from the GDC Portal.
+   - **Download/Access**: [NCI GDC Data Repository (Filtered for TCGA-COAD)](https://portal.gdc.cancer.gov/repository?filters=%7B%22op%22%3A%22and%22%2C%22content%22%3A%5B%7B%22op%22%3A%22in%22%2C%22content%22%3A%7B%22field%22%3A%22cases.project.project_id%22%2C%22value%22%3A%5B%22TCGA-COAD%22%5D%7D%7D%5D%7D)
 
 ---
 
@@ -94,7 +96,7 @@ colon-cancer-predictor/
 
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/your-username/colon-cancer-predictor.git
+   git clone https://github.com/Ronisnotasianfr/colon-cancer-predictor.git
    cd colon-cancer-predictor
    ```
 
@@ -118,13 +120,13 @@ You can run the entire pipeline from your terminal:
 2. **Train Models**:
    Perform 5-fold cross-validation and save model checkpoints:
    ```bash
-   python src/train.py --synthetic
+   python -m src.train --synthetic
    ```
    *(Remove `--synthetic` to run on actual downloaded datasets once downloaded in `data/raw`)*.
 3. **Evaluate Models**:
    Generate performance metrics, ROC curves, confusion matrices, and SHAP plots:
    ```bash
-   python src/evaluate.py
+   python -m src.evaluate
    ```
 
 ### Method B: Using Jupyter Notebooks
@@ -167,6 +169,6 @@ All validation charts are saved to the `results/` folder:
 ---
 
 ## 📚 References
-- **GSE39582 Paper**: Marisa et al. *Gene expression Classification of Colon Cancer defines six molecular subtypes with distinct clinical, molecular and survival characteristics*. PLoS Med, 2013.
-- **Proliferation Signature**: Whitfield et al. *Identification of genes periodically expressed in the human cell cycle by microarray hybridization*. Mol Biol Cell, 2002.
-- **SHAP values**: Lundberg & Lee. *A Unified Approach to Interpreting Model Predictions*. Advances in Neural Information Processing Systems (NeurIPS), 2017.
+*   **GSE39582 Paper**: Marisa et al. [*Gene expression Classification of Colon Cancer defines six molecular subtypes with distinct clinical, molecular and survival characteristics*](https://journals.plos.org/plosmedicine/article?id=10.1371/journal.pmed.1001453). PLoS Medicine, 2013.
+*   **Proliferation Signature**: Whitfield et al. [*Identification of genes periodically expressed in the human cell cycle by microarray hybridization*](https://www.molbiolcell.org/doi/10.1091/mbc.02-02-0030). Molecular Biology of the Cell, 2002.
+*   **SHAP values**: Lundberg & Lee. [*A Unified Approach to Interpreting Model Predictions*](https://papers.nips.cc/paper/7062-a-unified-approach-to-interpreting-model-predictions.pdf). Advances in Neural Information Processing Systems (NeurIPS), 2017.
