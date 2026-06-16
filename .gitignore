@@ -1,0 +1,28 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# IPYNB checkpoints
+.ipynb_checkpoints/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Data and models (large files)
+data/raw/
+data/processed/
+models/*.joblib
+models/*.pkl
+models/*.keras
+results/*.png
+results/*.csv
+results/*.txt
+results/*.md
+!results/evaluation_results_table.md # Keep the comparison table in git if desired
+
+# IDE settings
+.idea/
+.vscode/
