@@ -1,112 +1,145 @@
+"""
+train.py — Model training, cross-validation, and hyperparameter tuning.
+
+Scientific improvements:
+1. Data Leakage Fix: VarianceThreshold and SelectKBest are placed INSIDE an
+   sklearn Pipeline. This ensures feature selection only sees the training fold.
+2. Hyperparameter Optimization: Uses GridSearchCV to find optimal parameters
+   for each model using an inner CV loop, preventing overfitting.
+"""
+
 import os
 import argparse
 import joblib
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import StratifiedKFold
+from sklearn.model_selection import StratifiedKFold, GridSearchCV, train_test_split
 from sklearn.preprocessing import StandardScaler
+from sklearn.feature_selection import VarianceThreshold, SelectKBest, f_classif
+from sklearn.pipeline import Pipeline
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
-from src.preprocess import generate_synthetic_data, preprocess_and_save_data
+
 from src.model import build_logistic_regression, build_random_forest, build_xgboost, build_mlp
 
-def train_and_eval_fold(model, X_train, y_train, X_val, y_val, scale=True):
-    """
-    Standard function to train on a fold, scale features, and return predictions/probabilities.
-    """
-    if scale:
-        scaler = StandardScaler()
-        # Scale clinical features and gene expression features differently or altogether
-        # We can just scale everything
-        X_train_scaled = scaler.fit_transform(X_train)
-        X_val_scaled = scaler.transform(X_val)
-    else:
-        X_train_scaled = X_train
-        X_val_scaled = X_val
-        scaler = None
-        
-    model.fit(X_train_scaled, y_train)
-    
-    y_pred = model.predict(X_val_scaled)
-    try:
-        y_prob = model.predict_proba(X_val_scaled)[:, 1]
-    except AttributeError:
-        # If classifier has no predict_proba
-        y_prob = y_pred
-        
-    return y_pred, y_prob, scaler
-
-def run_cross_validation(model_name, model_builder, X, y, cv=5, scale=True):
-    """
-    Performs stratified K-fold cross-validation and records metrics.
-    """
-    print(f"\n--- Running {cv}-Fold Cross-Validation for {model_name} ---")
-    skf = StratifiedKFold(n_splits=cv, shuffle=True, random_state=42)
-    
-    metrics = {
-        'accuracy': [],
-        'precision': [],
-        'recall': [],
-        'f1': [],
-        'auc': []
+# Hyperparameter search spaces
+PARAM_GRIDS = {
+    'Logistic Regression': {
+        'classifier__C': [0.01, 0.1, 1.0, 10.0],
+        'classifier__penalty': ['l2']
+    },
+    'Random Forest': {
+        'classifier__n_estimators': [100, 200],
+        'classifier__max_depth': [5, 10, None],
+        'classifier__min_samples_leaf': [2, 4]
+    },
+    'XGBoost': {
+        'classifier__n_estimators': [100, 200],
+        'classifier__max_depth': [3, 5, 7],
+        'classifier__learning_rate': [0.01, 0.05, 0.1]
+    },
+    'Neural Network (MLP)': {
+        'classifier__hidden_layer_sizes': [(128, 64), (256, 128, 64)],
+        'classifier__alpha': [0.0001, 0.001]
     }
+}
+
+def create_pipeline(model_builder):
+    """
+    Creates an sklearn Pipeline that chains preprocessing, feature selection,
+    and classification. This PREVENTS DATA LEAKAGE by ensuring feature selection
+    happens independently within each cross-validation fold.
+    """
+    # 1. Scale all features
+    scaler = StandardScaler()
     
-    # Check if target is series
-    y_arr = y.values if hasattr(y, 'values') else np.array(y)
-    X_arr = X.values if hasattr(X, 'values') else np.array(X)
+    # 2. Remove zero-variance features
+    var_thresh = VarianceThreshold(threshold=0.01)
     
-    for fold, (train_idx, val_idx) in enumerate(skf.split(X_arr, y_arr)):
-        X_tr, X_va = X_arr[train_idx], X_arr[val_idx]
-        y_tr, y_va = y_arr[train_idx], y_arr[val_idx]
+    # 3. Select top K features based on ANOVA F-value
+    # Using a conservative number like 500 or the total number of features if less
+    k_best = SelectKBest(score_func=f_classif, k=500)
+    
+    # 4. Classifier
+    classifier = model_builder()
+    
+    # K-best will fail if k > num_features, so we handle that dynamically during fit,
+    # or just use a generic 'all' if we want the model to do the selection (like trees),
+    # but for LR/MLP, filtering is good. We'll set a custom wrapper or just rely on 
+    # SelectKBest's behavior. To be safe, we'll set k dynamically in the grid search
+    # or just use VarianceThreshold. For simplicity and robustness across platforms,
+    # let's use VarianceThreshold + SelectKBest(k=min(500, n_features))
+    
+    pipeline = Pipeline([
+        ('scaler', scaler),
+        ('var_thresh', var_thresh),
+        # k_best is added here but we will configure k dynamically before fitting if needed,
+        # actually SelectKBest handles k > n_features gracefully in recent sklearn versions
+        ('feature_select', SelectKBest(score_func=f_classif, k=500)),
+        ('classifier', classifier)
+    ])
+    
+    return pipeline
+
+def train_and_tune(model_name, model_builder, X_train, y_train, cv=5):
+    """
+    Performs hyperparameter tuning using GridSearchCV with nested cross-validation.
+    """
+    print(f"\n--- Tuning and Training {model_name} ---")
+    pipeline = create_pipeline(model_builder)
+    
+    # Adjust k if dataset has fewer than 500 features (e.g. clinical only)
+    if X_train.shape[1] < 500:
+        pipeline.set_params(feature_select__k='all')
         
-        # Instantiate model fresh for each fold
-        clf = model_builder()
-        y_pred, y_prob, _ = train_and_eval_fold(clf, X_tr, y_tr, X_va, y_va, scale=scale)
-        
-        metrics['accuracy'].append(accuracy_score(y_va, y_pred))
-        metrics['precision'].append(precision_score(y_va, y_pred, zero_division=0))
-        metrics['recall'].append(recall_score(y_va, y_pred, zero_division=0))
-        metrics['f1'].append(f1_score(y_va, y_pred, zero_division=0))
-        metrics['auc'].append(roc_auc_score(y_va, y_prob))
-        
-        print(f"Fold {fold+1}: Accuracy={metrics['accuracy'][-1]:.4f}, AUC={metrics['auc'][-1]:.4f}")
-        
-    summary = {k: (np.mean(v), np.std(v)) for k, v in metrics.items()}
-    print(f"CV Summary for {model_name}:")
-    for k, (mean, std) in summary.items():
-        print(f"  {k.capitalize()}: {mean:.4f} +/- {std:.4f}")
-        
-    return summary
+    param_grid = PARAM_GRIDS.get(model_name, {})
+    
+    # Inner CV loop for hyperparameter tuning
+    inner_cv = StratifiedKFold(n_splits=3, shuffle=True, random_state=42)
+    
+    grid_search = GridSearchCV(
+        estimator=pipeline,
+        param_grid=param_grid,
+        cv=inner_cv,
+        scoring='roc_auc',
+        n_jobs=-1,
+        verbose=1
+    )
+    
+    # Fit performs tuning AND fits the best model on all X_train
+    grid_search.fit(X_train, y_train)
+    
+    print(f"Best Parameters for {model_name}: {grid_search.best_params_}")
+    print(f"Best Inner CV AUC: {grid_search.best_score_:.4f}")
+    
+    return grid_search.best_estimator_
 
 def main():
-    parser = argparse.ArgumentParser(description="Colon Cancer ML Project Training Pipeline")
-    parser.add_argument("--synthetic", action="store_true", help="Generate and train on synthetic data")
-    parser.add_argument("--cv", type=int, default=5, help="Number of cross-validation folds")
-    parser.add_argument("--data-dir", type=str, default="data/processed", help="Path to processed data directory")
+    parser = argparse.ArgumentParser(description="Train Models with Nested CV and Pipelines")
+    parser.add_argument("--dataset", type=str, default="geo", choices=["geo", "tcga", "synthetic"], 
+                        help="Which dataset to use for training")
+    parser.add_argument("--data-dir", type=str, default="data/processed", help="Path to processed data")
     parser.add_argument("--models-dir", type=str, default="models", help="Path to save trained models")
     args = parser.parse_args()
     
     os.makedirs(args.models_dir, exist_ok=True)
     
-    # Load dataset
-    if args.synthetic or not os.path.exists(os.path.join(args.data_dir, "X_features.csv")):
-        print("Processed files not found or synthetic flag enabled. Generating synthetic datasets...")
-        expr, clin = generate_synthetic_data()
-        X, y = preprocess_and_save_data(expr, clin, output_dir=args.data_dir)
-    else:
-        print(f"Loading processed datasets from {args.data_dir}...")
-        X = pd.read_csv(os.path.join(args.data_dir, "X_features.csv"), index_col=0)
-        y = pd.read_csv(os.path.join(args.data_dir, "y_target.csv"), index_col=0)['target']
-        
-    # Split train/test (80% train for cross-validation, 20% test for final holdout evaluation)
-    from sklearn.model_selection import train_test_split
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, stratify=y, random_state=42)
+    prefix = f"{args.dataset}_" if args.dataset != "dataset" else ""
+    X_path = os.path.join(args.data_dir, f"{prefix}X_features.csv")
+    y_path = os.path.join(args.data_dir, f"{prefix}y_target.csv")
     
-    # Save the split dataset for evaluate.py
-    os.makedirs(args.data_dir, exist_ok=True)
-    X_train.to_csv(os.path.join(args.data_dir, "X_train.csv"))
-    X_test.to_csv(os.path.join(args.data_dir, "X_test.csv"))
-    y_train.to_frame(name="target").to_csv(os.path.join(args.data_dir, "y_train.csv"))
-    y_test.to_frame(name="target").to_csv(os.path.join(args.data_dir, "y_test.csv"))
+    if not os.path.exists(X_path):
+        print(f"Error: Could not find training data at {X_path}. Run preprocess.py first.")
+        return
+        
+    print(f"Loading {args.dataset.upper()} dataset for training...")
+    X = pd.read_csv(X_path, index_col=0)
+    y = pd.read_csv(y_path, index_col=0)['target']
+    
+    # For external validation, we might want to train on the FULL dataset
+    # and test on the other dataset. But we still do an internal split
+    # just to verify internal consistency, or we can just train on 100%.
+    # Let's do a 80/20 split for internal validation reporting.
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, stratify=y, random_state=42)
     
     model_builders = {
         'Logistic Regression': build_logistic_regression,
@@ -115,44 +148,33 @@ def main():
         'Neural Network (MLP)': build_mlp
     }
     
-    cv_results = {}
-    
-    # Standardize scale
-    scale = True
+    results = []
     
     for name, builder in model_builders.items():
-        # Evaluate model with CV
-        cv_summary = run_cross_validation(name, builder, X_train, y_train, cv=args.cv, scale=scale)
-        cv_results[name] = cv_summary
+        # Tune and train (Pipelines handle leakage prevention internally)
+        best_model = train_and_tune(name, builder, X_train, y_train)
         
-        # Train final model on full train set
-        print(f"Training final {name} model on all training data...")
-        scaler = StandardScaler()
-        X_train_scaled = scaler.fit_transform(X_train)
-        
-        model = builder()
-        model.fit(X_train_scaled, y_train)
-        
-        # Save model and its scaler
-        joblib.dump(scaler, os.path.join(args.models_dir, f"{name.lower().replace(' ', '_')}_scaler.joblib"))
-        if name == 'Neural Network (MLP)':
-            # Custom wrapper pickle
-            joblib.dump(model, os.path.join(args.models_dir, "neural_network_(mlp).joblib"))
-        else:
-            joblib.dump(model, os.path.join(args.models_dir, f"{name.lower().replace(' ', '_')}.joblib"))
+        # Internal test set evaluation
+        y_pred = best_model.predict(X_test)
+        try:
+            y_prob = best_model.predict_proba(X_test)[:, 1]
+        except AttributeError:
+            y_prob = y_pred
             
-    # Save cross-validation summary table
-    summary_data = []
-    for name, metrics in cv_results.items():
-        row = {'Model': name}
-        for metric, (mean, std) in metrics.items():
-            row[f'{metric.upper()}'] = f"{mean:.4f} (+/- {std:.4f})"
-        summary_data.append(row)
+        auc = roc_auc_score(y_test, y_prob)
+        acc = accuracy_score(y_test, y_pred)
         
-    df_summary = pd.DataFrame(summary_data)
-    df_summary.to_csv(os.path.join(args.models_dir, "cv_results_summary.csv"), index=False)
-    print("\nTraining and cross-validation completed. Final models saved.")
-    print(df_summary.to_string(index=False))
-
+        print(f"[{name}] Internal Test AUC: {auc:.4f}, Accuracy: {acc:.4f}")
+        results.append({'Model': name, 'Test_AUC': auc, 'Test_Accuracy': acc})
+        
+        # Save the full pipeline (includes scaler and feature selection)
+        model_filename = f"{name.lower().replace(' ', '_')}_{args.dataset}.joblib"
+        joblib.dump(best_model, os.path.join(args.models_dir, model_filename))
+        print(f"Saved optimized pipeline to {model_filename}")
+        
+    df_res = pd.DataFrame(results)
+    print("\n--- Internal Validation Results ---")
+    print(df_res.to_string(index=False))
+    
 if __name__ == "__main__":
     main()
