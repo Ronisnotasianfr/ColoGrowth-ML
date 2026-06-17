@@ -1,288 +1,553 @@
+"""
+preprocess.py — Data loading, target computation, and feature construction.
+
+Scientific notes:
+- The proliferation target is computed from a 10-gene cell cycle signature.
+- These 10 genes are REMOVED from the feature matrix to prevent target leakage.
+- Variance-based feature selection is NOT done here; it is handled inside
+  sklearn Pipelines in train.py to prevent data leakage across CV folds.
+"""
+
 import os
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
 import requests
-import io
 import gzip
 
-def generate_synthetic_data(n_samples=200, n_genes=1000):
+# =============================================================================
+# CONSTANTS
+# =============================================================================
+
+PROLIF_GENES = [
+    'MKI67', 'PCNA', 'TOP2A', 'MCM2', 'MCM6',
+    'AURKA', 'BUB1', 'CCNB1', 'CDK1', 'BIRC5'
+]
+
+# =============================================================================
+# TARGET LEAKAGE PREVENTION
+# =============================================================================
+
+def remove_proliferation_genes(X, prolif_genes=None):
     """
-    Generates synthetic gene expression and clinical data for testing purposes.
+    Remove proliferation signature genes from the feature matrix.
+
+    These genes define the target variable (proliferation score).
+    Including them as features would constitute target leakage:
+    the model would predict labels from the same genes used to create them.
+    """
+    if prolif_genes is None:
+        prolif_genes = PROLIF_GENES
+
+    cols_upper = {c.upper(): c for c in X.columns}
+    to_drop = [cols_upper[g] for g in prolif_genes if g in cols_upper]
+
+    if to_drop:
+        print(f"[LEAKAGE FIX] Removing {len(to_drop)} proliferation genes from features: {to_drop}")
+        X = X.drop(columns=to_drop)
+    else:
+        print("[LEAKAGE FIX] No proliferation genes found in feature columns (OK).")
+
+    return X
+
+
+def validate_no_leakage(X, prolif_genes=None):
+    """
+    Assert that no proliferation signature gene remains in the feature matrix.
+    Raises AssertionError if leakage is detected.
+    """
+    if prolif_genes is None:
+        prolif_genes = PROLIF_GENES
+
+    cols_upper = set(c.upper() for c in X.columns)
+    overlap = cols_upper.intersection(set(prolif_genes))
+
+    assert len(overlap) == 0, (
+        f"TARGET LEAKAGE DETECTED: {overlap} are used to compute the target "
+        f"and must not appear in the feature matrix."
+    )
+    print(f"[VALIDATION] No target leakage detected. Features: {X.shape[1]} columns.")
+
+# =============================================================================
+# SYNTHETIC DATA (fallback for testing)
+# =============================================================================
+
+def generate_synthetic_data(n_samples=300, n_genes=2000):
+    """
+    Generate synthetic gene expression and clinical data for pipeline testing.
+    Includes proliferation genes, survival times, and clinical metadata.
     """
     print(f"Generating {n_samples} synthetic samples with {n_genes} genes...")
     np.random.seed(42)
-    
-    # Proliferation-related genes
-    prolif_genes = ['MKI67', 'PCNA', 'TOP2A', 'MCM2', 'MCM6', 'AURKA', 'BUB1', 'CCNB1', 'CDK1', 'BIRC5']
-    other_genes = [f"GENE_{i}" for i in range(n_genes - len(prolif_genes))]
-    all_genes = prolif_genes + other_genes
-    
-    # Simulate expression matrix (samples x genes)
-    # Proliferation genes will have higher covariance
+
+    other_genes = [f"GENE_{i}" for i in range(n_genes - len(PROLIF_GENES))]
+    all_genes = PROLIF_GENES + other_genes
+
+    # Simulate expression matrix
     expression = np.random.normal(loc=6.0, scale=1.5, size=(n_samples, n_genes))
-    
-    # Make proliferation genes correlated to simulate cell growth rate
-    latent_proliferation = np.random.normal(loc=0.0, scale=1.0, size=(n_samples, 1))
-    prolif_indices = [all_genes.index(g) for g in prolif_genes]
-    for idx in prolif_indices:
-        expression[:, idx] += latent_proliferation.flatten() * 1.2
-        
-    df_expr = pd.DataFrame(expression, columns=all_genes)
-    df_expr.index = [f"Sample_{i}" for i in range(n_samples)]
-    
-    # Simulate clinical data
-    clinical = {
-        'sample_id': [f"Sample_{i}" for i in range(n_samples)],
+
+    # Latent proliferation signal drives proliferation genes
+    latent = np.random.normal(0, 1, size=(n_samples, 1))
+    for i, gene in enumerate(PROLIF_GENES):
+        idx = all_genes.index(gene)
+        expression[:, idx] += latent.flatten() * 1.2
+
+    # Some non-prolif genes also correlate with proliferation (biological reality)
+    for j in range(10, 30):
+        expression[:, j] += latent.flatten() * np.random.uniform(0.3, 0.7)
+
+    df_expr = pd.DataFrame(expression, columns=all_genes,
+                           index=[f"Sample_{i}" for i in range(n_samples)])
+
+    # Clinical data including simulated survival
+    stages = np.random.choice([1, 2, 3, 4], p=[0.2, 0.4, 0.3, 0.1], size=n_samples)
+    os_time = np.random.exponential(scale=60, size=n_samples).clip(1, 200)
+    # Higher proliferation and stage → shorter survival (simulated)
+    os_time -= latent.flatten() * 8 + stages * 3
+    os_time = os_time.clip(1, 200)
+    os_event = np.random.binomial(1, 0.6, size=n_samples)
+
+    clinical = pd.DataFrame({
         'age': np.random.randint(40, 85, size=n_samples),
         'gender': np.random.choice(['MALE', 'FEMALE'], size=n_samples),
-        'stage': np.random.choice(['Stage I', 'Stage II', 'Stage III', 'Stage IV'], p=[0.2, 0.4, 0.3, 0.1], size=n_samples),
-        'tumor_size_mm': np.random.normal(loc=45.0, scale=15.0, size=n_samples).clip(10, 120)
-    }
-    df_clinical = pd.DataFrame(clinical).set_index('sample_id')
-    
-    return df_expr, df_clinical
+        'stage': [f"Stage {'I' * s if s <= 3 else 'IV'}" for s in stages],
+        'os_time': os_time,
+        'os_event': os_event,
+    }, index=[f"Sample_{i}" for i in range(n_samples)])
+
+    return df_expr, clinical
+
+# =============================================================================
+# REAL DATA: GEO GSE39582
+# =============================================================================
 
 def download_geo_dataset(geo_id="GSE39582", dest_dir="data/raw"):
-    """
-    Downloads GSE39582 dataset series matrix file.
-    """
+    """Download GSE39582 series matrix file from NCBI FTP."""
     os.makedirs(dest_dir, exist_ok=True)
     filepath = os.path.join(dest_dir, f"{geo_id}_series_matrix.txt.gz")
-    
+
     if os.path.exists(filepath):
-        print(f"Dataset {geo_id} already exists at {filepath}")
+        print(f"[GEO] {geo_id} already cached at {filepath}")
         return filepath
-        
+
     url = f"https://ftp.ncbi.nlm.nih.gov/geo/series/GSE39nnn/{geo_id}/matrix/{geo_id}_series_matrix.txt.gz"
-    print(f"Downloading {geo_id} from {url}...")
+    print(f"[GEO] Downloading {geo_id} from {url} ...")
     try:
-        response = requests.get(url, stream=True, timeout=60)
-        response.raise_for_status()
+        resp = requests.get(url, stream=True, timeout=120)
+        resp.raise_for_status()
         with open(filepath, 'wb') as f:
-            for chunk in response.iter_content(chunk_size=8192):
+            for chunk in resp.iter_content(chunk_size=65536):
                 f.write(chunk)
-        print("Download completed.")
+        print(f"[GEO] Download complete: {filepath}")
         return filepath
     except Exception as e:
-        print(f"Failed to download GEO dataset: {e}")
+        print(f"[GEO] Download failed: {e}")
         return None
 
-def download_tcga_coad(dest_dir="data/raw"):
-    """
-    Downloads TCGA-COAD gene expression and clinical metadata from UCSC Xena.
-    """
+
+def download_gpl_annotation(gpl_id="GPL570", dest_dir="data/raw"):
+    """Download Affymetrix GPL570 probe-to-gene annotation from NCBI."""
     os.makedirs(dest_dir, exist_ok=True)
-    expr_path = os.path.join(dest_dir, "tcga_coad_expression.tsv.gz")
-    clinical_path = os.path.join(dest_dir, "tcga_coad_clinical.tsv")
-    
-    # URLs for UCSC Xena TCGA-COAD cohort (HiSeqV2 expression and phenotype data)
-    expr_url = "https://tcga-xena-hub.s3.us-east-1.amazonaws.com/download/TCGA.COAD.sampleMap%2FHiSeqV2.gz"
-    clinical_url = "https://tcga-xena-hub.s3.us-east-1.amazonaws.com/download/TCGA.COAD.sampleMap%2FCOAD_clinicalMatrix"
-    
-    success = True
-    
-    if not os.path.exists(expr_path):
-        print(f"Downloading TCGA-COAD Expression from {expr_url}...")
-        try:
-            r = requests.get(expr_url, timeout=120)
-            r.raise_for_status()
-            with open(expr_path, 'wb') as f:
-                f.write(r.content)
-            print("Expression downloaded.")
-        except Exception as e:
-            print(f"Failed to download TCGA-COAD expression: {e}")
-            success = False
-            
-    if not os.path.exists(clinical_path):
-        print(f"Downloading TCGA-COAD Clinical Matrix from {clinical_url}...")
-        try:
-            r = requests.get(clinical_url, timeout=60)
-            r.raise_for_status()
-            with open(clinical_path, 'wb') as f:
-                f.write(r.content)
-            print("Clinical data downloaded.")
-        except Exception as e:
-            print(f"Failed to download TCGA-COAD clinical matrix: {e}")
-            success = False
-            
-    return (expr_path, clinical_path) if success else (None, None)
+    filepath = os.path.join(dest_dir, f"{gpl_id}.annot.gz")
+
+    if os.path.exists(filepath):
+        print(f"[GPL] Annotation cached at {filepath}")
+        return filepath
+
+    url = f"https://ftp.ncbi.nlm.nih.gov/geo/platforms/{gpl_id}nnn/{gpl_id}/annot/{gpl_id}.annot.gz"
+    print(f"[GPL] Downloading {gpl_id} annotation...")
+    try:
+        resp = requests.get(url, stream=True, timeout=120)
+        resp.raise_for_status()
+        with open(filepath, 'wb') as f:
+            for chunk in resp.iter_content(chunk_size=65536):
+                f.write(chunk)
+        print(f"[GPL] Annotation downloaded: {filepath}")
+        return filepath
+    except Exception as e:
+        print(f"[GPL] Download failed: {e}")
+        return None
+
+
+def parse_gpl_annotation(filepath):
+    """
+    Parse GPL570 annotation file to extract probe_id → gene_symbol mapping.
+    The annotation file is tab-separated with a header section (lines starting with #).
+    """
+    print(f"[GPL] Parsing annotation: {filepath}")
+    rows = []
+    header = None
+    with gzip.open(filepath, 'rt', encoding='utf-8', errors='replace') as f:
+        for line in f:
+            if line.startswith('#') or line.strip() == '':
+                continue
+            parts = line.strip().split('\t')
+            if header is None:
+                header = parts
+                continue
+            rows.append(parts)
+
+    df = pd.DataFrame(rows, columns=header[:len(rows[0])] if header else None)
+
+    # Find the probe ID and gene symbol columns
+    id_col = None
+    gene_col = None
+    for col in df.columns:
+        col_lower = col.lower().strip()
+        if col_lower in ('id', 'probe set id', 'probe_id'):
+            id_col = col
+        if 'gene symbol' in col_lower or 'gene_symbol' in col_lower:
+            gene_col = col
+
+    if id_col is None or gene_col is None:
+        print(f"[GPL] Could not find ID or Gene Symbol columns. Columns: {list(df.columns[:10])}")
+        return pd.DataFrame(columns=['probe_id', 'gene_symbol'])
+
+    mapping = df[[id_col, gene_col]].rename(columns={id_col: 'probe_id', gene_col: 'gene_symbol'})
+    mapping = mapping[mapping['gene_symbol'].notna() & (mapping['gene_symbol'] != '')]
+    # Some entries have multiple gene symbols separated by ' /// '
+    mapping['gene_symbol'] = mapping['gene_symbol'].str.split(' /// ').str[0]
+    print(f"[GPL] Mapped {len(mapping)} probes to gene symbols.")
+    return mapping
+
 
 def parse_geo_matrix(filepath):
-    """
-    Parses a GEO series matrix file manually to avoid memory issues and external package dependencies if needed.
-    """
-    print(f"Parsing GEO Series Matrix: {filepath}")
-    metadata = {}
-    expression_data = []
-    gene_ids = []
-    
-    # Read series matrix gzipped file
+    """Parse GEO series matrix file into expression DataFrame and metadata."""
+    print(f"[GEO] Parsing series matrix: {filepath}")
+    metadata_lines = {}
+    expression_rows = []
+    probe_ids = []
+    sample_ids = None
+
     with gzip.open(filepath, 'rt', encoding='utf-8') as f:
-        in_matrix = False
+        in_table = False
         for line in f:
-            if line.startswith("!Series_") or line.startswith("!Sample_"):
-                # Parse metadata line
-                parts = line.strip().split("\t")
+            if line.startswith('!Sample_characteristics_ch1') or line.startswith('!Sample_geo_accession'):
+                parts = line.strip().split('\t')
                 key = parts[0]
-                values = parts[1:]
-                if key not in metadata:
-                    metadata[key] = []
-                metadata[key].append(values)
-            elif line.startswith("\"ID_REF\""):
-                in_matrix = True
-                header = line.strip().replace('"', '').split("\t")
+                values = [v.strip('"') for v in parts[1:]]
+                if key not in metadata_lines:
+                    metadata_lines[key] = []
+                metadata_lines[key].append(values)
+
+            elif line.startswith('"ID_REF"'):
+                in_table = True
+                header = line.strip().replace('"', '').split('\t')
                 sample_ids = header[1:]
                 continue
-            
-            if in_matrix:
-                if line.startswith("!series_matrix_table_end"):
+
+            if in_table:
+                if line.startswith('!series_matrix_table_end'):
                     break
-                parts = line.strip().replace('"', '').split("\t")
+                parts = line.strip().replace('"', '').split('\t')
                 if len(parts) > 1:
-                    gene_ids.append(parts[0])
-                    # Convert to floats, handle missing values
+                    probe_ids.append(parts[0])
                     vals = []
                     for v in parts[1:]:
                         try:
                             vals.append(float(v))
                         except ValueError:
                             vals.append(np.nan)
-                    expression_data.append(vals)
-                    
-    expr_df = pd.DataFrame(expression_data, index=gene_ids, columns=sample_ids).T
-    # Interpolate missing values
+                    expression_rows.append(vals)
+
+    expr_df = pd.DataFrame(expression_rows, index=probe_ids, columns=sample_ids).T
     expr_df = expr_df.fillna(expr_df.mean())
-    
-    # Create metadata DataFrame
-    meta_df = pd.DataFrame()
-    if "!Sample_title" in metadata:
-        meta_df['title'] = metadata["!Sample_title"][0]
-    if "!Sample_geo_accession" in metadata:
-        meta_df['geo_accession'] = metadata["!Sample_geo_accession"][0]
-        meta_df = meta_df.set_index('geo_accession')
-    
-    # Extract clinical keys if available
-    for key, vals in metadata.items():
-        if key.startswith("!Sample_characteristics_ch1"):
-            for i, val_list in enumerate(vals):
-                col_name = f"characteristic_{i}"
-                if len(val_list) == len(meta_df):
-                    meta_df[col_name] = val_list
-                    
-    return expr_df, meta_df
+
+    # Build clinical metadata from sample characteristics
+    clinical = pd.DataFrame(index=sample_ids)
+    if '!Sample_characteristics_ch1' in metadata_lines:
+        for i, char_values in enumerate(metadata_lines['!Sample_characteristics_ch1']):
+            if len(char_values) == len(sample_ids):
+                # Extract key:value from characteristic strings like "age: 65"
+                first_val = char_values[0]
+                if ':' in first_val:
+                    col_name = first_val.split(':')[0].strip().lower().replace(' ', '_')
+                    clinical[col_name] = [v.split(':', 1)[-1].strip() if ':' in v else v for v in char_values]
+
+    print(f"[GEO] Parsed expression: {expr_df.shape}, clinical: {clinical.shape}")
+    return expr_df, clinical
+
+
+def map_probes_to_genes(expr_df, probe_mapping):
+    """
+    Convert probe-level expression to gene-level by mapping probe IDs to
+    gene symbols and averaging expression across probes for the same gene.
+    """
+    probe_to_gene = dict(zip(probe_mapping['probe_id'], probe_mapping['gene_symbol']))
+
+    # Map column names (probe IDs) to gene symbols
+    gene_names = [probe_to_gene.get(pid, None) for pid in expr_df.columns]
+    valid_mask = [g is not None and g != '' and g != '---' for g in gene_names]
+
+    expr_mapped = expr_df.loc[:, valid_mask].copy()
+    expr_mapped.columns = [g for g, v in zip(gene_names, valid_mask) if v]
+
+    # Collapse duplicate genes by taking the mean
+    expr_gene = expr_mapped.T.groupby(expr_mapped.columns[valid_mask.count(True) - sum(valid_mask):]).mean().T
+    # Simpler approach: transpose, groupby columns, mean, transpose back
+    expr_gene = expr_mapped.groupby(expr_mapped.columns, axis=1).mean()
+
+    print(f"[PROBE MAP] {expr_df.shape[1]} probes → {expr_gene.shape[1]} unique genes")
+    return expr_gene
+
+
+def load_and_process_geo(data_dir="data"):
+    """
+    Download, parse, and process GSE39582 into gene-level expression + clinical data.
+    Returns (expression_df, clinical_df) with gene symbols as column names.
+    """
+    raw_dir = os.path.join(data_dir, "raw")
+
+    # Download series matrix
+    matrix_path = download_geo_dataset("GSE39582", raw_dir)
+    if matrix_path is None:
+        return None, None
+
+    # Parse series matrix (probe-level expression + clinical)
+    expr_probes, clinical = parse_geo_matrix(matrix_path)
+
+    # Download and parse GPL570 annotation for probe-to-gene mapping
+    gpl_path = download_gpl_annotation("GPL570", raw_dir)
+    if gpl_path is not None:
+        probe_map = parse_gpl_annotation(gpl_path)
+        if len(probe_map) > 0:
+            expr_genes = map_probes_to_genes(expr_probes, probe_map)
+            return expr_genes, clinical
+
+    print("[GEO] WARNING: Could not map probes to genes. Returning probe-level data.")
+    return expr_probes, clinical
+
+# =============================================================================
+# REAL DATA: TCGA-COAD (via UCSC Xena)
+# =============================================================================
+
+def download_tcga_coad(dest_dir="data/raw"):
+    """Download TCGA-COAD expression and clinical data from UCSC Xena."""
+    os.makedirs(dest_dir, exist_ok=True)
+    expr_path = os.path.join(dest_dir, "tcga_coad_expression.tsv.gz")
+    clinical_path = os.path.join(dest_dir, "tcga_coad_clinical.tsv")
+
+    expr_url = "https://tcga-xena-hub.s3.us-east-1.amazonaws.com/download/TCGA.COAD.sampleMap%2FHiSeqV2.gz"
+    clinical_url = "https://tcga-xena-hub.s3.us-east-1.amazonaws.com/download/TCGA.COAD.sampleMap%2FCOAD_clinicalMatrix"
+
+    for path, url, name in [(expr_path, expr_url, "expression"), (clinical_path, clinical_url, "clinical")]:
+        if not os.path.exists(path):
+            print(f"[TCGA] Downloading {name} from Xena...")
+            try:
+                r = requests.get(url, timeout=180)
+                r.raise_for_status()
+                with open(path, 'wb') as f:
+                    f.write(r.content)
+                print(f"[TCGA] {name} downloaded: {path}")
+            except Exception as e:
+                print(f"[TCGA] Failed to download {name}: {e}")
+                return None, None
+
+    return expr_path, clinical_path
+
+
+def load_and_process_tcga(data_dir="data"):
+    """
+    Download, parse, and process TCGA-COAD into expression + clinical DataFrames.
+    Xena expression is genes × samples (log2(norm_count+1)), already gene-symbol indexed.
+    """
+    raw_dir = os.path.join(data_dir, "raw")
+    expr_path, clinical_path = download_tcga_coad(raw_dir)
+
+    if expr_path is None:
+        return None, None
+
+    # Parse expression: genes × samples, transpose to samples × genes
+    print(f"[TCGA] Loading expression from {expr_path}...")
+    expr = pd.read_csv(expr_path, sep='\t', index_col=0, compression='gzip')
+    expr = expr.T  # Now samples × genes
+    print(f"[TCGA] Expression shape: {expr.shape}")
+
+    # Parse clinical
+    print(f"[TCGA] Loading clinical from {clinical_path}...")
+    clinical = pd.read_csv(clinical_path, sep='\t', index_col=0)
+
+    # Standardize clinical column names
+    col_map = {}
+    for c in clinical.columns:
+        cl = c.lower()
+        if 'age' in cl and 'diagnos' in cl:
+            col_map[c] = 'age'
+        elif cl in ('gender', 'gender.demographic'):
+            col_map[c] = 'gender'
+        elif 'pathologic_stage' in cl or 'pathologicstage' in cl.replace('_', ''):
+            col_map[c] = 'stage'
+        elif cl in ('_os', 'os.time', 'days_to_death'):
+            col_map[c] = 'os_time'
+        elif cl in ('_os_ind', 'os.indicator', 'vital_status'):
+            col_map[c] = 'os_event'
+
+    if col_map:
+        clinical = clinical.rename(columns=col_map)
+
+    # Match samples between expression and clinical
+    common = expr.index.intersection(clinical.index)
+    if len(common) > 0:
+        expr = expr.loc[common]
+        clinical = clinical.loc[common]
+
+    print(f"[TCGA] Matched {len(common)} samples between expression and clinical.")
+    return expr, clinical
+
+# =============================================================================
+# CORE PROCESSING
+# =============================================================================
 
 def compute_proliferation_score(expr_df):
     """
-    Computes a proliferation score as the mean z-score of a set of proliferation genes.
+    Compute proliferation score as the mean z-score of the 10-gene
+    cell cycle proliferation signature.
     """
-    prolif_genes = ['MKI67', 'PCNA', 'TOP2A', 'MCM2', 'MCM6', 'AURKA', 'BUB1', 'CCNB1', 'CDK1', 'BIRC5']
-    
-    # Find matching columns (case-insensitive)
-    columns_map = {col.upper(): col for col in expr_df.columns}
-    available_genes = [columns_map[g] for g in prolif_genes if g in columns_map]
-    
-    if not available_genes:
-        print("Warning: No proliferation genes found! Using raw average of first 5 genes as fallback.")
-        available_genes = list(expr_df.columns[:5])
-        
-    print(f"Computing proliferation score based on {len(available_genes)} genes: {available_genes}")
-    
-    # Z-score normalize the selected genes across samples
-    sub_df = expr_df[available_genes]
+    cols_upper = {c.upper(): c for c in expr_df.columns}
+    available = [cols_upper[g] for g in PROLIF_GENES if g in cols_upper]
+
+    if len(available) == 0:
+        print("[WARNING] No proliferation genes found. Using mean of first 10 genes as fallback.")
+        available = list(expr_df.columns[:10])
+
+    print(f"[PROLIF] Computing score from {len(available)}/{len(PROLIF_GENES)} genes: {available}")
+
+    sub = expr_df[available].values
     scaler = StandardScaler()
-    z_scores = scaler.fit_transform(sub_df)
-    
-    # Proliferation score is the mean z-score across these genes for each sample
-    scores = np.mean(z_scores, axis=1)
-    
+    z = scaler.fit_transform(sub)
+    scores = np.mean(z, axis=1)
+
     return pd.Series(scores, index=expr_df.index, name="proliferation_score")
 
+
 def binarize_target(scores, threshold=None):
-    """
-    Binarizes continuous scores into 0 (Low Proliferation) and 1 (High Proliferation) at the median.
-    """
+    """Binarize continuous scores at the median into Low (0) and High (1)."""
     if threshold is None:
         threshold = scores.median()
-    print(f"Binarizing proliferation score at median threshold: {threshold:.4f}")
+    print(f"[TARGET] Binarizing at median = {threshold:.4f}")
     return (scores >= threshold).astype(int)
 
-def preprocess_and_save_data(expr_df, clinical_df, output_dir="data/processed"):
+
+def encode_clinical(clinical_df):
+    """Extract and encode clinical features: age, gender, stage."""
+    result = pd.DataFrame(index=clinical_df.index)
+
+    # Age
+    age_cols = [c for c in clinical_df.columns if 'age' in c.lower()]
+    if age_cols:
+        result['clinical_age'] = pd.to_numeric(clinical_df[age_cols[0]], errors='coerce')
+        result['clinical_age'] = result['clinical_age'].fillna(result['clinical_age'].median())
+    else:
+        result['clinical_age'] = 60.0
+
+    # Gender
+    gender_cols = [c for c in clinical_df.columns if 'gender' in c.lower() or 'sex' in c.lower()]
+    if gender_cols:
+        result['clinical_is_male'] = (
+            clinical_df[gender_cols[0]].astype(str).str.upper().str.startswith('M').astype(int)
+        )
+    else:
+        result['clinical_is_male'] = 0
+
+    # Stage
+    stage_cols = [c for c in clinical_df.columns if 'stage' in c.lower()]
+    stage_map = {'I': 1, 'II': 2, 'III': 3, 'IV': 4, '1': 1, '2': 2, '3': 3, '4': 4}
+    if stage_cols:
+        mapped = []
+        for val in clinical_df[stage_cols[0]].astype(str).str.upper():
+            v = 0
+            for k, num in stage_map.items():
+                if k in val:
+                    v = num
+            mapped.append(v)
+        result['clinical_stage'] = mapped
+    else:
+        result['clinical_stage'] = 2
+
+    return result
+
+
+def preprocess_and_save_data(expr_df, clinical_df, output_dir="data/processed", dataset_name="dataset"):
     """
-    Preprocesses, normalizes, extracts features, computes target, and saves train/test sets.
+    Build features and target from expression + clinical data.
+
+    Critical scientific guarantees:
+    1. Proliferation signature genes are REMOVED from features (no target leakage).
+    2. NO feature selection is done here (that happens inside CV folds in train.py).
     """
     os.makedirs(output_dir, exist_ok=True)
-    
-    # 1. Compute target (Proliferation score)
+
+    # 1. Compute target from proliferation genes
     scores = compute_proliferation_score(expr_df)
     y = binarize_target(scores)
-    
-    # 2. Match samples between expression and clinical data
-    common_samples = expr_df.index.intersection(clinical_df.index)
-    print(f"Matched {len(common_samples)} samples between expression and clinical metadata.")
-    
-    X_expr = expr_df.loc[common_samples]
-    X_clin = clinical_df.loc[common_samples]
-    y = y.loc[common_samples]
-    
-    # 3. Clean clinical features
-    # Process age
-    age_col = [c for c in X_clin.columns if 'age' in c.lower()]
-    if age_col:
-        X_clin['age_clean'] = pd.to_numeric(X_clin[age_col[0]], errors='coerce')
-        X_clin['age_clean'] = X_clin['age_clean'].fillna(X_clin['age_clean'].median())
-    else:
-        X_clin['age_clean'] = 60.0
-        
-    # Process gender/sex
-    gender_col = [c for c in X_clin.columns if 'gender' in c.lower() or 'sex' in c.lower()]
-    if gender_col:
-        X_clin['is_male'] = X_clin[gender_col[0]].astype(str).str.upper().str.startswith('M').astype(int)
-    else:
-        X_clin['is_male'] = np.random.choice([0, 1], size=len(X_clin))
-        
-    # Process stage
-    stage_col = [c for c in X_clin.columns if 'stage' in c.lower() or 'pathology_t_stage' in c.lower()]
-    if stage_col:
-        # Simple label encoder for stage
-        stage_map = {'STAGE I': 1, 'STAGE II': 2, 'STAGE III': 3, 'STAGE IV': 4,
-                     'I': 1, 'II': 2, 'III': 3, 'IV': 4,
-                     '1': 1, '2': 2, '3': 3, '4': 4}
-        stages_mapped = []
-        for val in X_clin[stage_col[0]].astype(str).str.upper():
-            mapped_val = 0
-            for k, v in stage_map.items():
-                if k in val:
-                    mapped_val = v
-                    break
-            stages_mapped.append(mapped_val)
-        X_clin['stage_clean'] = stages_mapped
-    else:
-        X_clin['stage_clean'] = np.random.randint(1, 5, size=len(X_clin))
-        
-    # Build feature matrix
-    X_clin_clean = X_clin[['age_clean', 'is_male', 'stage_clean']].rename(
-        columns={'age_clean': 'clinical_age', 'is_male': 'clinical_is_male', 'stage_clean': 'clinical_stage'}
-    )
-    
-    # 4. Filter expression features (variance threshold)
-    variances = X_expr.var(axis=0)
-    # Select top 500 high-variance genes
-    top_genes = variances.nlargest(500).index
-    X_expr_filtered = X_expr[top_genes]
-    
-    # 5. Concatenate clinical and gene expression features
-    X_all = pd.concat([X_clin_clean, X_expr_filtered], axis=1)
-    
-    # Save processed files
-    X_all.to_csv(os.path.join(output_dir, "X_features.csv"))
-    y.to_frame(name="target").to_csv(os.path.join(output_dir, "y_target.csv"))
-    scores.to_frame(name="score").to_csv(os.path.join(output_dir, "proliferation_scores.csv"))
-    
-    print(f"Processed dataset saved successfully. X shape: {X_all.shape}, y shape: {y.shape}")
-    return X_all, y
+
+    # 2. Match samples
+    common = expr_df.index.intersection(clinical_df.index).intersection(scores.index)
+    print(f"[PREPROCESS] {len(common)} matched samples.")
+    expr_df = expr_df.loc[common]
+    clinical_df = clinical_df.loc[common]
+    y = y.loc[common]
+    scores = scores.loc[common]
+
+    # 3. Remove proliferation genes from features (TARGET LEAKAGE FIX)
+    X_expr = remove_proliferation_genes(expr_df)
+
+    # 4. Encode clinical features
+    X_clin = encode_clinical(clinical_df)
+
+    # 5. Combine (NO variance filtering — that belongs inside the CV Pipeline)
+    X = pd.concat([X_clin, X_expr], axis=1)
+
+    # 6. Validate no leakage
+    validate_no_leakage(X)
+
+    # 7. Save
+    prefix = f"{dataset_name}_" if dataset_name != "dataset" else ""
+    X.to_csv(os.path.join(output_dir, f"{prefix}X_features.csv"))
+    y.to_frame("target").to_csv(os.path.join(output_dir, f"{prefix}y_target.csv"))
+    scores.to_frame("score").to_csv(os.path.join(output_dir, f"{prefix}proliferation_scores.csv"))
+
+    # Save clinical data with survival columns for survival.py
+    clinical_df.loc[common].to_csv(os.path.join(output_dir, f"{prefix}clinical.csv"))
+
+    print(f"[PREPROCESS] Saved {dataset_name}: X={X.shape}, y={y.shape}")
+    return X, y
+
+
+# =============================================================================
+# CLI
+# =============================================================================
 
 if __name__ == "__main__":
-    # Test preprocess function
-    expr, clin = generate_synthetic_data()
-    X, y = preprocess_and_save_data(expr, clin)
+    import argparse
+    parser = argparse.ArgumentParser(description="Preprocess datasets for ColoGrowth-ML")
+    parser.add_argument("--download", action="store_true", help="Download real GEO + TCGA datasets")
+    parser.add_argument("--synthetic", action="store_true", help="Generate and process synthetic data")
+    parser.add_argument("--data-dir", default="data", help="Root data directory")
+    args = parser.parse_args()
+
+    proc_dir = os.path.join(args.data_dir, "processed")
+
+    if args.download:
+        print("=" * 60)
+        print("DOWNLOADING AND PROCESSING GSE39582 (GEO)")
+        print("=" * 60)
+        geo_expr, geo_clin = load_and_process_geo(args.data_dir)
+        if geo_expr is not None:
+            preprocess_and_save_data(geo_expr, geo_clin, proc_dir, dataset_name="geo")
+        else:
+            print("[ERROR] Could not load GEO data.")
+
+        print("\n" + "=" * 60)
+        print("DOWNLOADING AND PROCESSING TCGA-COAD")
+        print("=" * 60)
+        tcga_expr, tcga_clin = load_and_process_tcga(args.data_dir)
+        if tcga_expr is not None:
+            preprocess_and_save_data(tcga_expr, tcga_clin, proc_dir, dataset_name="tcga")
+        else:
+            print("[ERROR] Could not load TCGA data.")
+    else:
+        # Default: generate synthetic data
+        print("Generating synthetic data for pipeline testing...")
+        expr, clin = generate_synthetic_data()
+        preprocess_and_save_data(expr, clin, proc_dir, dataset_name="synthetic")

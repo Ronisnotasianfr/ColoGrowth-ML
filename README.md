@@ -37,31 +37,30 @@ We utilize two primary public repositories of cancer genomics:
 ---
 
 ## 🛠️ Pipeline Architecture
-The project is structured with a modular design to support reproducible training and assessment.
+The project is structured with a modular design to support reproducible training, rigorous validation, and clinical relevance.
 
 ```mermaid
 graph TD
     A[Raw Data GEO / TCGA] --> B[preprocess.py]
     B --> C[Compute Proliferation Index Score]
     C --> D[Binarize into High / Low Class]
-    B --> E[Normalize & Map Probes to Genes]
-    B --> F[Variance Filter: Top 500 Genes]
-    E & F --> G[Feature Matrix + Clinical Data]
-    G --> H[train.py]
-    H --> I[Stratified 5-Fold Cross Validation]
+    B --> E[Remove Proliferation Genes]
+    E -.-> |Prevent Target Leakage| F[Feature Matrix + Clinical Data]
+    D & F --> G[train.py]
+    G --> H[Nested CV + Pipeline]
+    H -.-> |Prevent Data Leakage| I[Variance Filter + KBest]
     I --> J[Fit & Save Models]
-    J --> K[evaluate.py]
-    K --> L[Test Set Evaluation]
-    K --> M[SHAP Interpretability Beeswarm]
+    J --> K[external_validation.py]
+    K --> L[Test on TCGA Cohort]
+    J --> M[survival.py]
+    M --> N[Kaplan-Meier Curves]
 ```
 
-### 1. Proliferation Index Computation
-The continuous growth index is derived using the mean Z-score of a **10-gene cell cycle proliferation signature**:
-$$\text{Proliferation Score} = \frac{1}{10} \sum_{g \in \mathcal{G}} \text{Z-score}(g)$$
-Where $\mathcal{G} = \{\text{MKI67, PCNA, TOP2A, MCM2, MCM6, AURKA, BUB1, CCNB1, CDK1, BIRC5}\}$.
-We split samples at the median score into:
-- 🟢 **Class 0 (Low Proliferation)**
-- 🔴 **Class 1 (High Proliferation)**
+### 1. Scientific Rigor & Leakage Prevention
+- **Target Leakage Prevention**: The 10 genes used to compute the target proliferation score are strictly removed from the feature matrix before training.
+- **Data Leakage Prevention**: Feature selection (VarianceThreshold and SelectKBest) is encapsulated within an `sklearn.pipeline.Pipeline`, ensuring selection only occurs on the training folds during Cross-Validation.
+- **Hyperparameter Tuning**: Uses `GridSearchCV` with nested cross-validation to prevent overfitting during hyperparameter selection.
+- **External Validation**: Models are trained on the GEO microarray cohort and validated on the independent TCGA-COAD RNA-seq cohort.
 
 ---
 
@@ -79,12 +78,13 @@ colon-cancer-predictor/
 │   └── 04_evaluation.ipynb   # Performance comparison, ROC, and SHAP interpretability
 ├── src/
 │   ├── __init__.py           # Package declaration
-│   ├── preprocess.py         # Data download, cleanup, and feature engineering
+│   ├── preprocess.py         # Data download, probe-mapping, and leakage prevention
 │   ├── model.py              # ML classifier builders (LR, RF, XGB, MLP)
-│   ├── train.py              # Cross-validation & final model fitting
-│   └── evaluate.py           # Metrics calculation & plotting scripts
+│   ├── train.py              # Nested CV, Pipeline definitions, model fitting
+│   ├── external_validation.py# Cross-cohort validation (GEO -> TCGA)
+│   └── survival.py           # Kaplan-Meier curves and Log-Rank tests
 ├── models/                   # Saved model checkpoints (.joblib)
-├── results/                  # Confusion matrices, ROC comparison, & SHAP plots
+├── results/                  # Confusion matrices, ROC, Calibration, and KM plots
 ├── requirements.txt          # Python package requirements
 ├── LICENSE                   # MIT License
 └── README.md                 # This file
