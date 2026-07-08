@@ -113,20 +113,27 @@ colon-cancer-predictor/
 You can run the entire pipeline from your terminal:
 
 1. **Preprocess data**:
-   Run preprocessing on real or synthetic data:
    ```bash
-   python src/preprocess.py
+   python -m src.preprocess --synthetic          # quick local test
+   python -m src.preprocess --download           # GEO + TCGA real data
    ```
-2. **Train Models**:
-   Perform 5-fold cross-validation and save model checkpoints:
+2. **Train models** (leakage-free 5-fold CV + holdout evaluation):
    ```bash
-   python -m src.train --synthetic
+   python -m src.train --dataset synthetic
+   python -m src.train --dataset geo
    ```
-   *(Remove `--synthetic` to run on actual downloaded datasets once downloaded in `data/raw`)*.
-3. **Evaluate Models**:
-   Generate performance metrics, ROC curves, confusion matrices, and SHAP plots:
+3. **Evaluate models** (holdout ROC, confusion matrices, SHAP):
    ```bash
-   python -m src.evaluate
+   python -m src.evaluate --dataset synthetic
+   ```
+4. **External validation** (train GEO → test TCGA):
+   ```bash
+   python -m src.external_validation --train-dataset geo --test-dataset tcga
+   ```
+5. **Build research paper** (auto-injects metrics from `results/`):
+   ```bash
+   python paper/build_paper.py --dataset synthetic
+   python paper/build_pdf.py --dataset synthetic
    ```
 
 ### Method B: Using Jupyter Notebooks
@@ -143,20 +150,43 @@ jupyter notebook
 
 ## 📊 Summary of Results
 
-### Cross-Validation Performance (Training Fold Summary)
+> **Note:** The proliferation label is computed from a 10-gene cell-cycle signature (MKI67, PCNA, TOP2A, etc.), and those genes are removed from the feature matrix before training. GEO cohort AUCs of 0.97–0.99 reflect that many non-signature genes in the ~54,000-feature microarray are biologically correlated with proliferation. External validation on TCGA confirms high discriminative AUC but poor calibration (low accuracy despite high AUC), a known challenge in cross-platform generalization.
 
-| Model | Accuracy | Precision | Recall | F1-Score | ROC-AUC |
-| :--- | :---: | :---: | :---: | :---: | :---: |
-| **Logistic Regression (Baseline)** | 0.8125 | 0.8250 | 0.8000 | 0.8122 | 0.8906 |
-| **Random Forest Classifier** | 0.8875 | 0.8935 | 0.8800 | 0.8867 | 0.9425 |
-| **Gradient Boosting (XGBoost)** | 0.9125 | 0.9231 | 0.9000 | 0.9114 | 0.9638 |
-| **Neural Network (MLP)** | 0.8938 | 0.9000 | 0.8875 | 0.8937 | 0.9502 |
+### GEO Cohort (585 samples, real data)
+
+| Model | CV ROC-AUC (mean ± std) | Holdout Accuracy | Holdout ROC-AUC |
+| :--- | :---: | :---: | :---: |
+| **Logistic Regression** | 0.980 ± 0.009 | 0.949 | 0.994 |
+| **Random Forest** | 0.983 ± 0.009 | 0.932 | 0.985 |
+| **XGBoost** | 0.976 ± 0.012 | 0.949 | 0.992 |
+| **Neural Network (MLP)** | 0.971 ± 0.018 | 0.932 | 0.983 |
+
+### Synthetic Cohort (300 samples, baseline)
+
+| Model | CV ROC-AUC (mean ± std) | Holdout Accuracy | Holdout ROC-AUC |
+| :--- | :---: | :---: | :---: |
+| **Logistic Regression** | 0.673 ± 0.039 | 0.633 | 0.716 |
+| **Random Forest** | 0.664 ± 0.062 | 0.617 | 0.701 |
+| **XGBoost** | 0.697 ± 0.054 | 0.700 | 0.724 |
+| **Neural Network (MLP)** | 0.663 ± 0.054 | 0.667 | 0.738 |
+
+### External Validation (GEO → TCGA)
+
+| Model | External AUC | External Accuracy | Brier Score |
+| :--- | :---: | :---: | :---: |
+| **Logistic Regression** | 0.978 | 0.520 | 0.476 |
+| **Random Forest** | 0.691 | 0.514 | 0.322 |
+| **XGBoost** | 0.907 | 0.508 | 0.478 |
+| **Neural Network (MLP)** | 0.969 | 0.505 | 0.493 |
+
+*Regenerate tables after training: `results/all_models_{dataset}_leakage_fixed_metrics.csv`*
 
 ### Evaluation Plots
 All validation charts are saved to the `results/` folder:
-- **`results/roc_curves_comparison.png`**: Multi-model ROC comparison showing classifier curves.
-- **`results/confusion_matrix_<model>.png`**: Confusion matrices depicting true vs predicted counts.
-- **`results/shap_summary_<model>.png`**: SHAP beeswarm plot ranking contribution of genes (like *MKI67*, *AURKA*) vs clinical features (like *stage*).
+- **`results/roc_curves_comparison.png`**: Multi-model holdout ROC comparison.
+- **`results/confusion_matrix_<model>.png`**: Confusion matrices for each classifier.
+- **`results/shap_summary_<model>.png`**: SHAP beeswarm plots on leakage-free, pipeline-transformed features.
+- **`results/<model>_leakage_fixed_metrics.csv`**: Per-model CV and holdout metrics exported by `train.py`.
 
 ---
 

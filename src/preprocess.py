@@ -1,11 +1,10 @@
 """
-preprocess.py — Data loading, target computation, and feature construction.
+preprocess.py - Data loading, target computation, and feature engineering.
 
-Scientific notes:
-- The proliferation target is computed from a 10-gene cell cycle signature.
-- These 10 genes are REMOVED from the feature matrix to prevent target leakage.
-- Variance-based feature selection is NOT done here; it is handled inside
-  sklearn Pipelines in train.py to prevent data leakage across CV folds.
+Notes:
+- Target is computed from a 10-gene cell cycle signature.
+- Signature genes are removed from features to prevent leakage.
+- Variance filtering is handled in train.py via pipeline.
 """
 
 import os
@@ -15,26 +14,17 @@ from sklearn.preprocessing import StandardScaler
 import requests
 import gzip
 
-# =============================================================================
-# CONSTANTS
-# =============================================================================
 
 PROLIF_GENES = [
     'MKI67', 'PCNA', 'TOP2A', 'MCM2', 'MCM6',
     'AURKA', 'BUB1', 'CCNB1', 'CDK1', 'BIRC5'
 ]
 
-# =============================================================================
-# TARGET LEAKAGE PREVENTION
-# =============================================================================
 
 def remove_proliferation_genes(X, prolif_genes=None):
     """
     Remove proliferation signature genes from the feature matrix.
-
-    These genes define the target variable (proliferation score).
-    Including them as features would constitute target leakage:
-    the model would predict labels from the same genes used to create them.
+    Prevents predicting labels from the same genes used to create them.
     """
     if prolif_genes is None:
         prolif_genes = PROLIF_GENES
@@ -43,10 +33,10 @@ def remove_proliferation_genes(X, prolif_genes=None):
     to_drop = [cols_upper[g] for g in prolif_genes if g in cols_upper]
 
     if to_drop:
-        print(f"[LEAKAGE FIX] Removing {len(to_drop)} proliferation genes from features: {to_drop}")
+        print(f"Removing {len(to_drop)} proliferation genes from features to prevent leakage.")
         X = X.drop(columns=to_drop)
     else:
-        print("[LEAKAGE FIX] No proliferation genes found in feature columns (OK).")
+        print("No proliferation genes found in features.")
 
     return X
 
@@ -62,15 +52,9 @@ def validate_no_leakage(X, prolif_genes=None):
     cols_upper = set(c.upper() for c in X.columns)
     overlap = cols_upper.intersection(set(prolif_genes))
 
-    assert len(overlap) == 0, (
-        f"TARGET LEAKAGE DETECTED: {overlap} are used to compute the target "
-        f"and must not appear in the feature matrix."
-    )
-    print(f"[VALIDATION] No target leakage detected. Features: {X.shape[1]} columns.")
+    assert len(overlap) == 0, f"Target leakage detected: {overlap} are in feature matrix."
+    print(f"Leakage check passed. Features: {X.shape[1]} columns.")
 
-# =============================================================================
-# SYNTHETIC DATA (fallback for testing)
-# =============================================================================
 
 def generate_synthetic_data(n_samples=300, n_genes=2000):
     """
@@ -117,9 +101,6 @@ def generate_synthetic_data(n_samples=300, n_genes=2000):
 
     return df_expr, clinical
 
-# =============================================================================
-# REAL DATA: GEO GSE39582
-# =============================================================================
 
 def download_geo_dataset(geo_id="GSE39582", dest_dir="data/raw"):
     """Download GSE39582 series matrix file from NCBI FTP."""
@@ -154,8 +135,14 @@ def download_gpl_annotation(gpl_id="GPL570", dest_dir="data/raw"):
         print(f"[GPL] Annotation cached at {filepath}")
         return filepath
 
-    url = f"https://ftp.ncbi.nlm.nih.gov/geo/platforms/{gpl_id}nnn/{gpl_id}/annot/{gpl_id}.annot.gz"
-    print(f"[GPL] Downloading {gpl_id} annotation...")
+    # Calculate GEO platform directory (e.g. GPL570 -> GPLnnn, GPL1053 -> GPL1nnn)
+    num_part = ''.join(c for c in gpl_id if c.isdigit())
+    if len(num_part) <= 3:
+        range_str = "GPLnnn"
+    else:
+        range_str = f"GPL{num_part[:-3]}nnn"
+    url = f"https://ftp.ncbi.nlm.nih.gov/geo/platforms/{range_str}/{gpl_id}/annot/{gpl_id}.annot.gz"
+    print(f"[GPL] Downloading {gpl_id} annotation from {url}...")
     try:
         resp = requests.get(url, stream=True, timeout=120)
         resp.raise_for_status()
@@ -172,22 +159,30 @@ def download_gpl_annotation(gpl_id="GPL570", dest_dir="data/raw"):
 def parse_gpl_annotation(filepath):
     """
     Parse GPL570 annotation file to extract probe_id → gene_symbol mapping.
-    The annotation file is tab-separated with a header section (lines starting with #).
+    The annotation file contains a table between !platform_table_begin and !platform_table_end.
     """
     print(f"[GPL] Parsing annotation: {filepath}")
     rows = []
     header = None
+    in_table = False
     with gzip.open(filepath, 'rt', encoding='utf-8', errors='replace') as f:
         for line in f:
-            if line.startswith('#') or line.strip() == '':
+            line_str = line.strip()
+            if not in_table:
+                if line_str.startswith('!platform_table_begin'):
+                    in_table = True
                 continue
-            parts = line.strip().split('\t')
+            if line_str.startswith('!platform_table_end'):
+                break
+            if line_str == '':
+                continue
+            parts = line_str.split('\t')
             if header is None:
                 header = parts
                 continue
             rows.append(parts)
 
-    df = pd.DataFrame(rows, columns=header[:len(rows[0])] if header else None)
+    df = pd.DataFrame(rows, columns=header)
 
     # Find the probe ID and gene symbol columns
     id_col = None
@@ -196,8 +191,16 @@ def parse_gpl_annotation(filepath):
         col_lower = col.lower().strip()
         if col_lower in ('id', 'probe set id', 'probe_id'):
             id_col = col
-        if 'gene symbol' in col_lower or 'gene_symbol' in col_lower:
+        if col_lower in ('gene symbol', 'gene_symbol'):
             gene_col = col
+            
+    # Fallback to substring matching if exact match not found
+    if gene_col is None:
+        for col in df.columns:
+            col_lower = col.lower().strip()
+            if 'gene symbol' in col_lower or 'gene_symbol' in col_lower:
+                gene_col = col
+                break
 
     if id_col is None or gene_col is None:
         print(f"[GPL] Could not find ID or Gene Symbol columns. Columns: {list(df.columns[:10])}")
@@ -287,7 +290,7 @@ def map_probes_to_genes(expr_df, probe_mapping):
     # Simpler approach: transpose, groupby columns, mean, transpose back
     expr_gene = expr_mapped.groupby(expr_mapped.columns, axis=1).mean()
 
-    print(f"[PROBE MAP] {expr_df.shape[1]} probes → {expr_gene.shape[1]} unique genes")
+    print(f"[PROBE MAP] {expr_df.shape[1]} probes -> {expr_gene.shape[1]} unique genes")
     return expr_gene
 
 
@@ -317,9 +320,6 @@ def load_and_process_geo(data_dir="data"):
     print("[GEO] WARNING: Could not map probes to genes. Returning probe-level data.")
     return expr_probes, clinical
 
-# =============================================================================
-# REAL DATA: TCGA-COAD (via UCSC Xena)
-# =============================================================================
 
 def download_tcga_coad(dest_dir="data/raw"):
     """Download TCGA-COAD expression and clinical data from UCSC Xena."""
@@ -394,9 +394,6 @@ def load_and_process_tcga(data_dir="data"):
     print(f"[TCGA] Matched {len(common)} samples between expression and clinical.")
     return expr, clinical
 
-# =============================================================================
-# CORE PROCESSING
-# =============================================================================
 
 def compute_proliferation_score(expr_df):
     """
@@ -407,10 +404,10 @@ def compute_proliferation_score(expr_df):
     available = [cols_upper[g] for g in PROLIF_GENES if g in cols_upper]
 
     if len(available) == 0:
-        print("[WARNING] No proliferation genes found. Using mean of first 10 genes as fallback.")
+        print("Warning: No proliferation genes found, using mean of first 10 genes instead.")
         available = list(expr_df.columns[:10])
 
-    print(f"[PROLIF] Computing score from {len(available)}/{len(PROLIF_GENES)} genes: {available}")
+    print(f"Computing score from {len(available)}/{len(PROLIF_GENES)} available genes.")
 
     sub = expr_df[available].values
     scaler = StandardScaler()
@@ -424,7 +421,7 @@ def binarize_target(scores, threshold=None):
     """Binarize continuous scores at the median into Low (0) and High (1)."""
     if threshold is None:
         threshold = scores.median()
-    print(f"[TARGET] Binarizing at median = {threshold:.4f}")
+    print(f"Binarizing target at median: {threshold:.4f}")
     return (scores >= threshold).astype(int)
 
 
@@ -470,10 +467,6 @@ def encode_clinical(clinical_df):
 def preprocess_and_save_data(expr_df, clinical_df, output_dir="data/processed", dataset_name="dataset"):
     """
     Build features and target from expression + clinical data.
-
-    Critical scientific guarantees:
-    1. Proliferation signature genes are REMOVED from features (no target leakage).
-    2. NO feature selection is done here (that happens inside CV folds in train.py).
     """
     os.makedirs(output_dir, exist_ok=True)
 
@@ -483,19 +476,19 @@ def preprocess_and_save_data(expr_df, clinical_df, output_dir="data/processed", 
 
     # 2. Match samples
     common = expr_df.index.intersection(clinical_df.index).intersection(scores.index)
-    print(f"[PREPROCESS] {len(common)} matched samples.")
+    print(f"Matched {len(common)} samples.")
     expr_df = expr_df.loc[common]
     clinical_df = clinical_df.loc[common]
     y = y.loc[common]
     scores = scores.loc[common]
 
-    # 3. Remove proliferation genes from features (TARGET LEAKAGE FIX)
+    # 3. Remove proliferation genes
     X_expr = remove_proliferation_genes(expr_df)
 
     # 4. Encode clinical features
     X_clin = encode_clinical(clinical_df)
 
-    # 5. Combine (NO variance filtering — that belongs inside the CV Pipeline)
+    # 5. Combine
     X = pd.concat([X_clin, X_expr], axis=1)
 
     # 6. Validate no leakage
@@ -510,13 +503,10 @@ def preprocess_and_save_data(expr_df, clinical_df, output_dir="data/processed", 
     # Save clinical data with survival columns for survival.py
     clinical_df.loc[common].to_csv(os.path.join(output_dir, f"{prefix}clinical.csv"))
 
-    print(f"[PREPROCESS] Saved {dataset_name}: X={X.shape}, y={y.shape}")
+    print(f"Saved {dataset_name}: X={X.shape}, y={y.shape}")
     return X, y
 
 
-# =============================================================================
-# CLI
-# =============================================================================
 
 if __name__ == "__main__":
     import argparse

@@ -1,0 +1,118 @@
+\documentclass[11pt]{article}
+\usepackage[margin=0.8in]{geometry}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{times}
+\usepackage{caption}
+\usepackage{float}
+\usepackage[hidelinks]{hyperref}
+\graphicspath{{../}{./}}
+
+\title{\textbf{Machine Learning Prediction of Colon Cancer Proliferation Class from Gene Expression and Clinical Features}}
+\author{Rohan Saindane\\Independent Research Project}
+\date{June 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+This report presents an independent computational biology project evaluating whether colon cancer samples can be separated into high- and low-proliferation classes using gene expression and clinical features, after removing the ten signature genes used to define the proliferation label. The leakage-free pipeline combines preprocessing, 5-fold stratified cross-validation with fold-local scaling and feature selection, hyperparameter tuning, holdout evaluation, and survival visualization. On the GEO cohort (585 samples, 22182 features after signature-gene removal), Logistic Regression achieved the strongest holdout ROC-AUC of 0.9939 with holdout accuracy 0.9487. Cross-validated ROC-AUC values ranged from 0.9711 to 0.9832, indicating moderate but biologically plausible separability without target leakage.
+\end{abstract}
+
+\section{Introduction}
+Cell proliferation is one of the central behaviors that separates aggressive tumors from slower-growing disease. In colon cancer, proliferation-related markers are often discussed alongside stage, survival, and molecular subtype because growth rate can reflect both tumor biology and clinical risk. Direct clinical measurement usually depends on pathology or immunohistochemical staining. A computational model cannot replace those assays, but it can test whether expression patterns carry enough signal to approximate a proliferation class and point toward genes that deserve closer review.
+
+The goal of this project was to build a reproducible machine learning pipeline that predicts a binary high-versus-low proliferation label from expression and clinical features, then inspect model behavior with standard metrics and interpretation plots. The report is intended for external academic feedback from faculty or researchers in bioinformatics, computational biology, cancer genomics, or biomedical machine learning.
+
+\section{Materials and Methods}
+The processed dataset contains 585 samples and 22182 features after signature-gene removal. Clinical covariates include age, sex, and stage. The binary target is balanced with 292 low, 293 high. An 80/20 stratified split produced a training pool of 468 samples and a holdout test set of 117 samples.
+
+\begin{table}[H]
+\centering
+\caption{Processed data files available in the project at the time of this report.}
+\begin{tabular}{lccc}
+\toprule
+\textbf{Dataset file} & \textbf{Samples} & \textbf{Features/columns} & \textbf{Class balance} \\
+\midrule
+  geo_X_features / y_target & 585 & 22182 & 292 low, 293 high \\
+  Training pool (80% stratified split) & 468 & 22182 & Stratified by class \\
+  Holdout test (20% stratified split) & 117 & 22182 & Stratified by class \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Four classifiers were compared: logistic regression, random forest, XGBoost, and a multilayer perceptron. Each model was wrapped in an sklearn Pipeline containing standardization, variance filtering, SelectKBest feature selection, and the classifier. Five-fold stratified cross-validation was performed on the training pool with fold-local preprocessing, followed by GridSearchCV hyperparameter tuning and final holdout evaluation.
+
+Target leakage was controlled by computing the proliferation label from a ten-gene cell-cycle signature (MKI67, PCNA, TOP2A, MCM2, MCM6, AURKA, BUB1, CCNB1, CDK1, BIRC5) and then removing those genes from the feature matrix before train-test splitting. Data leakage during validation was controlled by encapsulating StandardScaler, VarianceThreshold, and SelectKBest inside an sklearn Pipeline so each cross-validation fold refit preprocessing on training rows only.
+
+\section{Results}
+After removing target-defining signature genes, tree-based models remained competitive but with realistic performance. In five-fold cross-validation on the training pool, random forest reached a mean ROC-AUC of 0.9832 (+/- 0.0094), XGBoost reached 0.9756 (+/- 0.0120), logistic regression reached 0.9801 (+/- 0.0092), and the neural network reached 0.9711 (+/- 0.0184).
+
+\begin{table}[H]
+\centering
+\caption{Cross-validation and holdout results from the evaluation run.}
+\begin{tabular}{lccc}
+\toprule
+\textbf{Model} & \textbf{CV ROC-AUC (mean +/- std)} & \textbf{Holdout Accuracy} & \textbf{Holdout ROC-AUC} \\
+\midrule
+  Logistic Regression & 0.9801 (+/- 0.0092) & 0.9487 & 0.9939 \\
+  Random Forest & 0.9832 (+/- 0.0094) & 0.9316 & 0.9845 \\
+  XGBoost & 0.9756 (+/- 0.0120) & 0.9487 & 0.9915 \\
+  Neural Network (MLP) & 0.9711 (+/- 0.0184) & 0.9316 & 0.9828 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.78\linewidth]{results/roc_curves_comparison.png}
+\caption{Holdout ROC curves comparing the four trained classifiers.}
+\end{figure}
+
+On the untouched holdout split, Logistic Regression achieved the highest ROC-AUC (0.9939) with accuracy 0.9487. These leakage-corrected estimates are substantially lower than earlier inflated runs that retained signature genes in the feature matrix, and should be interpreted as an unbiased assessment of whether non-signature transcriptomic and clinical features retain proliferation signal.
+
+\section{Interpretation and Biological Readout}
+SHAP summaries were generated from pipeline-transformed, leakage-free features. Because the ten signature genes used to define the proliferation label were removed before training, top-ranked features should be interpreted as candidate biological or clinical correlates rather than label-construction artifacts.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.78\linewidth]{results/shap_summary_random_forest.png}
+\caption{Random forest SHAP summary from the leakage-corrected evaluation run.}
+\end{figure}
+
+Kaplan-Meier survival plots provide a secondary clinical visualization linking proliferation grouping to outcome-style endpoints where survival metadata are available.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.72\linewidth]{results/kaplan_meier_geo.png}
+\caption{Kaplan-Meier curve (geo cohort workflow demonstration).}
+\end{figure}
+
+\section{Discussion}
+The project has a strong structure for an early-stage computational biology study. It includes modular preprocessing, several baseline and nonlinear classifiers, standard metrics, interpretation figures, and survival-oriented visualization. The strongest technical choice is the attempt to put scaling and feature selection inside the model pipeline, because that is the right direction for reducing data leakage during cross-validation.
+
+The corrected analysis confirms that the pipeline can train, cross-validate, and evaluate a proliferation classifier without target leakage. Performance in the approximately 0.60-0.75 ROC-AUC range suggests that proliferation class is partially learnable from non-signature features, but the task is materially harder once the label-defining genes are excluded. This is the scientifically appropriate framing for faculty review.
+
+\section{Limitations and Next Steps}
+\begin{itemize}
+    \item Validate generalization on independent external cohorts (GEO to TCGA) using aligned, leakage-free features.
+    \item Report confidence intervals or repeated split results instead of relying on one holdout partition.
+    \item Link survival analysis to model predictions rather than ground-truth proliferation labels alone.
+    \item Regenerate all figures after each full pipeline rerun to keep the manuscript synchronized with code.
+    \item Request faculty review of target definition, leakage controls, and external validation design.
+\end{itemize}
+
+\section{References}
+\begin{enumerate}
+    \item Marisa, L. et al. Gene expression classification of colon cancer into molecular subtypes with distinct clinical and survival characteristics. \textit{PLoS Medicine}, 2013.
+    \item Whitfield, M. L. et al. Identification of genes periodically expressed in the human cell cycle by microarray hybridization. \textit{Molecular Biology of the Cell}, 2002.
+    \item Used, S. M. and Lee, S.-I. A unified approach to interpreting model predictions. \textit{Advances in Neural Information Processing Systems}, 2017.
+    \item The Cancer Genome Atlas Research Network. TCGA Colon Adenocarcinoma data resource, accessed through the NCI Genomic Data Commons.
+    \item National Center for Biotechnology Information Gene Expression Omnibus. GSE39582 dataset record.
+\end{enumerate}
+
+\section*{Peer Review Contact Plan}
+This report is suitable to send to a faculty reviewer in bioinformatics, computational biology, cancer genomics, or biomedical machine learning. The review request should ask specifically for feedback on target definition, leakage control, external validation, and whether the corrected conclusions are stated cautiously enough for academic submission.
+
+\end{document}

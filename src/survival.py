@@ -35,6 +35,23 @@ def run_survival_analysis(clinical_path, scores_path, results_dir, dataset_name)
     # Load clinical data (should contain os_time and os_event)
     clinical = pd.read_csv(clinical_path, index_col=0)
     
+    # Normalize column names to handle different dataset formats
+    # GEO uses: os.event, os.delay_(months), rfs.event, rfs.delay
+    # Expected: os_event, os_time
+    rename_map = {}
+    for col in clinical.columns:
+        if col in ('os.event',):
+            rename_map[col] = 'os_event'
+        elif col in ('os.delay_(months)', 'os.delay', 'os_delay_months'):
+            rename_map[col] = 'os_time'
+        elif col in ('rfs.event',):
+            rename_map[col] = 'rfs_event'
+        elif col in ('rfs.delay',):
+            rename_map[col] = 'rfs_time'
+    if rename_map:
+        clinical = clinical.rename(columns=rename_map)
+        print(f"  Renamed columns: {rename_map}")
+    
     # Load target/predictions (can be ground truth proliferation or model predictions)
     # Using ground truth target here for simplicity, or we could load model predictions.
     # The requirement is just to link proliferation class to survival.
@@ -50,6 +67,24 @@ def run_survival_analysis(clinical_path, scores_path, results_dir, dataset_name)
     if 'os_time' not in merged.columns or 'os_event' not in merged.columns:
         print(f"Dataset {dataset_name} lacks survival columns (os_time, os_event). Skipping.")
         return
+    
+    # Convert string-valued os_event (TCGA uses "DECEASED"/"LIVING") to numeric
+    if merged['os_event'].dtype == object:
+        event_map = {'DECEASED': 1, 'LIVING': 0, 'Dead': 1, 'Alive': 0}
+        merged['os_event'] = merged['os_event'].map(event_map)
+        print(f"  Converted string os_event to numeric (mapped: {event_map})")
+    
+    # Ensure os_time is numeric
+    merged['os_time'] = pd.to_numeric(merged['os_time'], errors='coerce')
+    
+    # For censored patients (event==0) with missing os_time, use days_to_last_followup
+    if 'days_to_last_followup' in merged.columns:
+        followup = pd.to_numeric(merged['days_to_last_followup'], errors='coerce')
+        mask_missing_time = merged['os_time'].isna() & (merged['os_event'] == 0)
+        merged.loc[mask_missing_time, 'os_time'] = followup[mask_missing_time]
+        filled = mask_missing_time.sum()
+        if filled > 0:
+            print(f"  Filled {filled} missing os_time values from days_to_last_followup")
         
     # Drop rows with missing survival data
     merged = merged.dropna(subset=['os_time', 'os_event', col_name])
