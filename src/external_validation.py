@@ -1,5 +1,5 @@
 """
-external_validation.py — Cross-cohort validation with platform calibration.
+external_validation.py — Cross-cohort validation with platform calibration and ensembles.
 
 Trains on one cohort (e.g., GEO microarray) and evaluates on a completely
 independent cohort (e.g., TCGA RNA-seq) to demonstrate generalizability.
@@ -8,6 +8,7 @@ Implements:
   1. Feature alignment across platforms
   2. Platt scaling (manual sigmoid calibration via LogisticRegression on
      raw predicted probabilities) to fix cross-platform threshold shift
+  3. Soft-Voting Ensembles (All Models and Top-3 Models) to boost accuracy
 """
 
 import os
@@ -127,12 +128,12 @@ def main():
     y_ext = pd.read_csv(y_test_path, index_col=0)['target']
 
     print(
-        f"\n{'='*65}\n"
+        f"\n{'='*75}\n"
         f"  Cross-Cohort Validation: "
         f"Train on {args.train_dataset.upper()}, "
         f"Test on {args.test_dataset.upper()}\n"
-        f"  With Platt scaling probability calibration\n"
-        f"{'='*65}"
+        f"  With Platt scaling calibration & Soft-Voting Ensembles\n"
+        f"{'='*75}"
     )
 
     X_ext_aligned = align_features(X_train_ref, X_ext)
@@ -149,11 +150,17 @@ def main():
     raw_results = []
     calibrated_results = []
 
+    # --- Dictionaries to store raw probabilities for ensemble building ---
+    dict_prob_full = {}
+    dict_prob_calib = {}
+    dict_prob_eval = {}
+
     # --- ROC plot setup ---
     fig_roc, axes_roc = plt.subplots(1, 2, figsize=(14, 6))
     for ax in axes_roc:
         ax.plot([0, 1], [0, 1], 'k--', label='Random')
 
+    # ----- 1. Individual Models -----
     for name in MODEL_NAMES:
         slug = model_type_slug(name)
         model_path = os.path.join(
@@ -193,6 +200,11 @@ def main():
             prob_calib = pipeline.predict_proba(X_calib)[:, 1]
             prob_eval_raw = pipeline.predict_proba(X_eval)[:, 1]
 
+            # Save to dictionaries for ensemble
+            dict_prob_full[name] = y_prob_raw_full
+            dict_prob_calib[name] = prob_calib
+            dict_prob_eval[name] = prob_eval_raw
+
             # Fit sigmoid on calibration split, predict on evaluation split
             y_pred_cal, prob_eval_cal = platt_scale(
                 y_calib.values, prob_calib, prob_eval_raw
@@ -231,11 +243,79 @@ def main():
                 'Calibrated_Brier': raw_brier,
             })
 
+    # ----- 2. Soft-Voting Ensembles -----
+    ensembles = {
+        'Ensemble (All Models)': MODEL_NAMES,
+        'Ensemble (Top-3 Models)': ['Logistic Regression', 'XGBoost', 'Neural Network (MLP)']
+    }
+
+    for ens_name, models_to_include in ensembles.items():
+        # Filter to models actually loaded and stored in dict
+        avail_models = [m for m in models_to_include if m in dict_prob_full]
+        if len(avail_models) < 2:
+            print(f"Skipping {ens_name}: not enough base models loaded.")
+            continue
+
+        print(f"\nEvaluating {ens_name} (using: {', '.join(avail_models)}) ...")
+
+        # Soft average probabilities
+        ens_prob_full = np.mean([dict_prob_full[m] for m in avail_models], axis=0)
+        ens_prob_calib = np.mean([dict_prob_calib[m] for m in avail_models], axis=0)
+        ens_prob_eval_raw = np.mean([dict_prob_eval[m] for m in avail_models], axis=0)
+
+        # Raw ensemble predictions (threshold at 0.5)
+        y_pred_ens_raw = (ens_prob_full >= 0.5).astype(int)
+
+        raw_auc = roc_auc_score(y_ext, ens_prob_full)
+        raw_acc = accuracy_score(y_ext, y_pred_ens_raw)
+        raw_brier = brier_score_loss(y_ext, ens_prob_full)
+
+        raw_results.append({
+            'Model': ens_name,
+            'Raw_AUC': raw_auc,
+            'Raw_Accuracy': raw_acc,
+            'Raw_Brier': raw_brier,
+        })
+
+        fpr, tpr, _ = roc_curve(y_ext, ens_prob_full)
+        axes_roc[0].plot(fpr, tpr, label=f'{ens_name} (AUC={raw_auc:.3f})', linestyle='--')
+
+        # Calibrated ensemble
+        try:
+            y_pred_ens_cal, ens_prob_eval_cal = platt_scale(
+                y_calib.values, ens_prob_calib, ens_prob_eval_raw
+            )
+
+            cal_auc = roc_auc_score(y_eval, ens_prob_eval_cal)
+            cal_acc = accuracy_score(y_eval, y_pred_ens_cal)
+            cal_brier = brier_score_loss(y_eval, ens_prob_eval_cal)
+
+            calibrated_results.append({
+                'Model': ens_name,
+                'Calibrated_AUC': cal_auc,
+                'Calibrated_Accuracy': cal_acc,
+                'Calibrated_Brier': cal_brier,
+            })
+
+            fpr_cal, tpr_cal, _ = roc_curve(y_eval, ens_prob_eval_cal)
+            axes_roc[1].plot(fpr_cal, tpr_cal, label=f'{ens_name} (AUC={cal_auc:.3f})', linestyle='--')
+
+            print(
+                f"[{ens_name}]\n"
+                f"  Raw:        AUC={raw_auc:.4f}  Acc={raw_acc:.4f}  Brier={raw_brier:.4f}\n"
+                f"  Calibrated: AUC={cal_auc:.4f}  Acc={cal_acc:.4f}  Brier={cal_brier:.4f}"
+            )
+
+            # Save comparison plot for ensemble
+            ens_slug = model_type_slug(ens_name)
+            calib_path = os.path.join(args.results_dir, f"calibration_comparison_{ens_slug}.png")
+            plot_calibration_comparison(y_eval, ens_prob_eval_raw, ens_prob_eval_cal, ens_name, calib_path)
+
+        except Exception as exc:
+            print(f"[{ens_name}] Calibration failed: {exc}")
+
     if not raw_results:
-        print(
-            "No trained pipelines found. Run training first, e.g. "
-            f"python -m src.train --dataset {args.train_dataset}"
-        )
+        print("No results compiled. Check models directory.")
         return
 
     # --- Finalize ROC plots ---
@@ -270,14 +350,14 @@ def main():
     df_combined.to_csv(out_csv, index=False)
 
     # --- Print summary table ---
-    print(f"\n{'='*80}")
-    print("  EXTERNAL VALIDATION SUMMARY (with Platt Scaling Calibration)")
-    print(f"{'='*80}")
-    print(f"\n{'Model':<25} {'Raw Acc':>8} {'Cal Acc':>8} {'Raw AUC':>8} {'Cal AUC':>8} {'Raw Brier':>10} {'Cal Brier':>10}")
-    print("-" * 85)
+    print(f"\n{'='*95}")
+    print("  EXTERNAL VALIDATION SUMMARY (with Platt Scaling Calibration & Ensembles)")
+    print(f"{'='*95}")
+    print(f"\n{'Model':<30} {'Raw Acc':>8} {'Cal Acc':>8} {'Raw AUC':>8} {'Cal AUC':>8} {'Raw Brier':>10} {'Cal Brier':>10}")
+    print("-" * 100)
     for _, row in df_combined.iterrows():
         print(
-            f"{row['Model']:<25} "
+            f"{row['Model']:<30} "
             f"{row['Raw_Accuracy']:>8.4f} {row['Calibrated_Accuracy']:>8.4f} "
             f"{row['Raw_AUC']:>8.4f} {row['Calibrated_AUC']:>8.4f} "
             f"{row['Raw_Brier']:>10.4f} {row['Calibrated_Brier']:>10.4f}"

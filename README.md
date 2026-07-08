@@ -82,11 +82,13 @@ Evaluated on an 80/20 train/test split. Cross-validation (CV) results reflect a 
 | **Neural Network (MLP)** | $0.9711 \pm 0.0184$ | 0.9316 | 0.9828 |
 
 ### 2. External Validation & Platt Scaling (GEO $\rightarrow$ TCGA)
-Evaluating models trained on GEO (microarray) directly on TCGA (RNA-seq) initially resulted in high discriminative capacity (ROC-AUC ~0.97) but poor default accuracy (~52%) due to cross-platform scale shifts. **Platt scaling** (fitting a post-hoc sigmoid probability calibrator on a 50% split of TCGA) successfully aligned the threshold, restoring competitive accuracy.
+Evaluating models trained on GEO (microarray) directly on TCGA (RNA-seq) initially resulted in high discriminative capacity (ROC-AUC ~0.97) but poor default accuracy (~52%) due to cross-platform scale shifts. **Platt scaling** (fitting a post-hoc sigmoid probability calibrator on a 50% split of TCGA) successfully aligned the threshold, restoring competitive accuracy. We also developed soft-voting ensembles to integrate probabilities across models.
 
 | Model | Raw AUC | Calibrated Accuracy | Calibrated Brier Score |
 | :--- | :---: | :---: | :---: |
 | **XGBoost** | 0.9071 | **0.8364** | **0.1311** |
+| **Ensemble (Top-3 Models)** | 0.9131 | **0.8364** | **0.1307** |
+| **Ensemble (All Models)** | 0.7110 | **0.7091** | **0.2079** |
 | **Random Forest** | 0.6910 | **0.6970** | **0.2139** |
 | **Neural Network (MLP)** | 0.9685 | **0.6848** | **0.1993** |
 | **Logistic Regression** | 0.9775 | **0.6061** | **0.2212** |
