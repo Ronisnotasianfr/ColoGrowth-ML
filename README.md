@@ -150,7 +150,7 @@ jupyter notebook
 
 ## 📊 Summary of Results
 
-> **Note:** The proliferation label is computed from a 10-gene cell-cycle signature (MKI67, PCNA, TOP2A, etc.), and those genes are removed from the feature matrix before training. GEO cohort AUCs of 0.97–0.99 reflect that many non-signature genes in the ~54,000-feature microarray are biologically correlated with proliferation. External validation on TCGA confirms high discriminative AUC but poor calibration (low accuracy despite high AUC), a known challenge in cross-platform generalization.
+> **Note:** The proliferation label is computed from a 10-gene cell-cycle signature (MKI67, PCNA, TOP2A, etc.), and those genes are removed from the feature matrix before training. GEO cohort AUCs of 0.97–0.99 reflect that many non-signature genes in the ~22,000-feature microarray are biologically correlated with proliferation. External validation on TCGA initially showed poor calibration (coin-flip accuracy despite high AUC) due to microarray→RNA-seq platform differences. **Platt scaling** (sigmoid probability calibration) resolved this, raising XGBoost's external accuracy from 50.8% to **83.6%**.
 
 ### GEO Cohort (585 samples, real data)
 
@@ -170,14 +170,14 @@ jupyter notebook
 | **XGBoost** | 0.697 ± 0.054 | 0.700 | 0.724 |
 | **Neural Network (MLP)** | 0.663 ± 0.054 | 0.667 | 0.738 |
 
-### External Validation (GEO → TCGA)
+### External Validation (GEO → TCGA) with Platt Scaling
 
-| Model | External AUC | External Accuracy | Brier Score |
+| Model | Raw AUC | Calibrated Accuracy | Calibrated Brier Score |
 | :--- | :---: | :---: | :---: |
-| **Logistic Regression** | 0.978 | 0.520 | 0.476 |
-| **Random Forest** | 0.691 | 0.514 | 0.322 |
-| **XGBoost** | 0.907 | 0.508 | 0.478 |
-| **Neural Network (MLP)** | 0.969 | 0.505 | 0.493 |
+| **Logistic Regression** | 0.978 | 0.606 | 0.221 |
+| **Random Forest** | 0.691 | 0.697 | 0.214 |
+| **XGBoost** | 0.907 | **0.836** | **0.131** |
+| **Neural Network (MLP)** | 0.969 | 0.685 | 0.199 |
 
 *Regenerate tables after training: `results/all_models_{dataset}_leakage_fixed_metrics.csv`*
 
