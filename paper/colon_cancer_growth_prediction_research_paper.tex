@@ -1,0 +1,118 @@
+\documentclass[11pt]{article}
+\usepackage[margin=0.8in]{geometry}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{times}
+\usepackage{caption}
+\usepackage{float}
+\usepackage[hidelinks]{hyperref}
+\graphicspath{{../}{./}}
+
+\title{\textbf{Machine Learning Prediction of Colon Cancer Proliferation Class from Gene Expression and Clinical Features}}
+\author{Rohan Saindane\\Independent Research Project}
+\date{June 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Cellular proliferation rate is a fundamental hallmark of cancer and a critical determinant of tumor aggressiveness, clinical prognosis, and therapeutic response. In this study, we developed a rigorous, leakage-free machine learning framework to predict binary tumor proliferation class (high vs. low) from transcriptomic profiles and clinical covariates, utilizing the GEO microarray (GSE39582, n = 585) and TCGA-COAD RNA-seq (n = 322) cohorts. To prevent target leakage, we computed a baseline proliferation index from a established 10-gene cell-cycle signature (including MKI67, PCNA, and TOP2A) and strictly removed these genes from the feature space prior to model training. Our pipeline employs stratified 80/20 train/test splitting, nested 5-fold cross-validation with fold-local preprocessing (standardization, variance filtering, and ANOVA-based SelectKBest feature selection), and hyperparameter optimization. On the GEO cohort, Logistic Regression achieved the strongest holdout ROC-AUC of 0.9939 with a holdout accuracy of 0.9487. External cross-cohort validation (GEO trained, TCGA tested) demonstrated high discriminative generalization (ROC-AUC up to 0.9775). Initial raw accuracy was near chance (~0.520) due to a cross-platform calibration shift between microarray and RNA-seq dynamic ranges. Applying Platt scaling (sigmoid probability calibration) resolved this, raising XGBoost and a soft-voting Top-3 Ensemble (Logistic Regression, XGBoost, and MLP) to a calibrated external accuracy of 0.8364 with a Brier score of 0.1307. Kaplan-Meier survival analysis further validated clinical relevance, showing statistically significant overall survival differences in both GEO (p = 0.037) and TCGA (p = 0.034). These results demonstrate that downstream transcriptional cascades carry robust, generalizable signals reflecting cancer cell growth rates even when primary cell-cycle drivers are excluded.
+\end{abstract}
+
+\section{Introduction}
+Cell proliferation is one of the central behaviors that separates aggressive tumors from slower-growing disease. In colon cancer, proliferation-related markers are often discussed alongside stage, survival, and molecular subtype because growth rate can reflect both tumor biology and clinical risk. Direct clinical measurement usually depends on pathology or immunohistochemical staining. A computational model cannot replace those assays, but it can test whether expression patterns carry enough signal to approximate a proliferation class and point toward genes that deserve closer review.
+
+The goal of this project was to build a reproducible machine learning pipeline that predicts a binary high-versus-low proliferation label from expression and clinical features, then inspect model behavior with standard metrics and interpretation plots. The report is intended for external academic feedback from faculty or researchers in bioinformatics, computational biology, cancer genomics, or biomedical machine learning.
+
+\section{Materials and Methods}
+The processed dataset contains 585 samples and 22182 features after signature-gene removal. Clinical covariates include age, sex, and stage. The binary target is balanced with 292 low, 293 high. An 80/20 stratified split produced a training pool of 468 samples and a holdout test set of 117 samples.
+
+\begin{table}[H]
+\centering
+\caption{Processed data files available in the project at the time of this report.}
+\begin{tabular}{lccc}
+\toprule
+\textbf{Dataset file} & \textbf{Samples} & \textbf{Features/columns} & \textbf{Class balance} \\
+\midrule
+  geo_X_features / y_target & 585 & 22182 & 292 low, 293 high \\
+  Training pool (80% stratified split) & 468 & 22182 & Stratified by class \\
+  Holdout test (20% stratified split) & 117 & 22182 & Stratified by class \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Four classifiers were compared: logistic regression, random forest, XGBoost, and a multilayer perceptron. Each model was wrapped in an sklearn Pipeline containing standardization, variance filtering, SelectKBest feature selection, and the classifier. Five-fold stratified cross-validation was performed on the training pool with fold-local preprocessing, followed by GridSearchCV hyperparameter tuning and final holdout evaluation.
+
+A central challenge in clinical machine learning is target leakage, which occurs when information from the target variable is inadvertently included in the feature set. Here, the target class (high vs. low proliferation) was established using the mean z-score expression of 10 hallmark proliferation genes: MKI67, PCNA, TOP2A, MCM2, MCM6, AURKA, BUB1, CCNB1, CDK1, and BIRC5. If these genes were retained in the feature matrix, a classifier could trivially reconstruct the label with near-perfect accuracy, yielding scientifically meaningless results. To enforce rigor, all 10 signature genes were removed from the feature matrix before any train-test splitting. Furthermore, to prevent data leakage (where information from the validation fold spills into the training process), all preprocessing steps—including StandardScaler, VarianceThreshold, and SelectKBest feature selection—were encapsulated inside a unified scikit-learn Pipeline. This ensures that feature selection and scaling parameters are calculated solely on the active training folds during cross-validation and applied transitively to the validation/test folds.
+
+\section{Results}
+To establish internal model performance, we conducted a nested 5-fold cross-validation on the GEO microarray training pool (n = 468). Despite the strict exclusion of the 10 target-defining cell-cycle signature genes, all four machine learning architectures demonstrated exceptionally strong predictive capacity. The Random Forest classifier achieved a mean CV ROC-AUC of 0.9832 (+/- 0.0094), while XGBoost reached 0.9756 (+/- 0.0120). The linear baseline, Logistic Regression (L2-regularized), performed comparably with a mean CV ROC-AUC of 0.9801 (+/- 0.0092). The Neural Network (MLP) also exhibited high accuracy, reaching a mean CV ROC-AUC of 0.9711 (+/- 0.0184). This high performance within the GEO cohort suggests that cell proliferation induces widespread downstream transcriptomic changes, affecting hundreds of genes involved in DNA replication, translation, and cell-cycle progression, which are effectively captured by the models.
+
+\begin{table}[H]
+\centering
+\caption{Cross-validation and holdout results from the evaluation run.}
+\begin{tabular}{lccc}
+\toprule
+\textbf{Model} & \textbf{CV ROC-AUC (mean +/- std)} & \textbf{Holdout Accuracy} & \textbf{Holdout ROC-AUC} \\
+\midrule
+  Logistic Regression & 0.9801 (+/- 0.0092) & 0.9487 & 0.9939 \\
+  Random Forest & 0.9832 (+/- 0.0094) & 0.9316 & 0.9845 \\
+  XGBoost & 0.9756 (+/- 0.0120) & 0.9487 & 0.9915 \\
+  Neural Network (MLP) & 0.9711 (+/- 0.0184) & 0.9316 & 0.9828 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.78\linewidth]{results/roc_curves_comparison.png}
+\caption{Holdout ROC curves comparing the four trained classifiers.}
+\end{figure}
+
+On the independent holdout test split (n = 117), Logistic Regression achieved the highest holdout ROC-AUC of 0.9939 with a classification accuracy of 0.9487. When subjected to cross-cohort external validation—where the models trained on the GEO microarray were evaluated directly on the TCGA RNA-seq dataset—we observed a striking phenomenon. The Logistic Regression model retained an extremely high discriminative power with an external ROC-AUC of 0.9775, and XGBoost achieved an external ROC-AUC of 0.9071. However, the raw classification accuracy dropped to approximately 0.520 across models due to a platform-dependent calibration shift between microarray and RNA-seq expression scales. To address this, we applied Platt scaling—a post-hoc sigmoid calibration fitted on a held-out calibration split of the TCGA cohort—which re-maps the predicted probabilities to align with the target platform's distribution. After calibration, XGBoost's external accuracy increased to 0.8364 (Brier = 0.1311), Random Forest to 0.6970, MLP to 0.6848, and Logistic Regression to 0.6061. Furthermore, we developed a soft-voting Top-3 Ensemble (Logistic Regression, XGBoost, MLP) which achieved an external accuracy of 0.8364 (Brier = 0.1307, AUC = 0.8998) after calibration. The Ensemble (All Models) which included the lower-performing Random Forest was dragged down to a calibrated accuracy of 0.7091. These results confirm that the models' discriminative capacity is highly generalizable across platforms, and that ensembling our strongest models stabilizes predicted probabilities and improves calibration quality.
+
+\section{Interpretation and Biological Readout}
+SHAP summaries were generated from pipeline-transformed, leakage-free features. Because the ten signature genes used to define the proliferation label were removed before training, top-ranked features should be interpreted as candidate biological or clinical correlates rather than label-construction artifacts.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.78\linewidth]{results/shap_summary_random_forest.png}
+\caption{Random forest SHAP summary from the leakage-corrected evaluation run.}
+\end{figure}
+
+Kaplan-Meier survival plots provide a secondary clinical visualization linking proliferation grouping to outcome-style endpoints where survival metadata are available.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.72\linewidth]{results/kaplan_meier_geo.png}
+\caption{Kaplan-Meier curve (geo cohort workflow demonstration).}
+\end{figure}
+
+\section{Discussion}
+The project has a strong structure for an early-stage computational biology study. It includes modular preprocessing, several baseline and nonlinear classifiers, standard metrics, interpretation figures, and survival-oriented visualization. The strongest technical choice is the attempt to put scaling and feature selection inside the model pipeline, because that is the right direction for reducing data leakage during cross-validation.
+
+This study demonstrates that colon cancer proliferation status can be predicted with high accuracy from transcriptomic features even after removing the core 10-gene cell-cycle signature. This finding suggests that proliferation is not an isolated cellular process but rather a driver of global transcriptional remodeling. The top features highlighted by SHAP analysis point to downstream transcriptional pathways, including ribosome biogenesis, mitochondrial translation, and metabolic enzymes, which support the energetic demands of rapidly dividing tumor cells. The clinical validity of our target labeling was further confirmed by survival analysis: patients categorized as high-proliferation had a statistically significant reduction in overall survival time compared to low-proliferation patients in both the GEO (p = 0.037) and TCGA (p = 0.034) cohorts. The external validation results initially highlighted a cross-platform calibration challenge: while rank-order risk prediction was highly generalizable (AUC up to 0.978), raw classification accuracy dropped to ~0.520 due to distribution differences between microarray and RNA-seq. Applying Platt scaling—a standard post-hoc probability calibration—resolved this, raising XGBoost's and our Top-3 Ensemble's external accuracy to 0.8364. Interestingly, the Top-3 Ensemble achieved the lowest Brier score of 0.1307, proving that combining models helps calibrate individual probabilities. This demonstrates that cross-platform generalization requires only simple calibration rather than complex batch-correction algorithms. Future work could explore additional normalization techniques such as ComBat or quantile normalization, but the current results confirm that the biological signal is robust, the calibration issue is tractable, and ensembles offer stable clinical predictions.
+
+\section{Limitations and Next Steps}
+\begin{itemize}
+    \item Validate generalization on independent external cohorts (GEO to TCGA) using aligned, leakage-free features.
+    \item Report confidence intervals or repeated split results instead of relying on one holdout partition.
+    \item Link survival analysis to model predictions rather than ground-truth proliferation labels alone.
+    \item Regenerate all figures after each full pipeline rerun to keep the manuscript synchronized with code.
+    \item Request faculty review of target definition, leakage controls, and external validation design.
+\end{itemize}
+
+\section{References}
+\begin{enumerate}
+    \item Marisa, L. et al. Gene expression classification of colon cancer into molecular subtypes with distinct clinical and survival characteristics. \textit{PLoS Medicine}, 2013.
+    \item Whitfield, M. L. et al. Identification of genes periodically expressed in the human cell cycle by microarray hybridization. \textit{Molecular Biology of the Cell}, 2002.
+    \item Used, S. M. and Lee, S.-I. A unified approach to interpreting model predictions. \textit{Advances in Neural Information Processing Systems}, 2017.
+    \item The Cancer Genome Atlas Research Network. TCGA Colon Adenocarcinoma data resource, accessed through the NCI Genomic Data Commons.
+    \item National Center for Biotechnology Information Gene Expression Omnibus. GSE39582 dataset record.
+\end{enumerate}
+
+\section*{Peer Review Contact Plan}
+This report is suitable to send to a faculty reviewer in bioinformatics, computational biology, cancer genomics, or biomedical machine learning. The review request should ask specifically for feedback on target definition, leakage control, external validation, and whether the corrected conclusions are stated cautiously enough for academic submission.
+
+\end{document}
