@@ -1,14 +1,16 @@
 """
-external_validation.py — Cross-cohort validation with platform calibration and ensembles.
+external_validation.py — Cross-cohort validation with platform calibration, quantile normalization, and ensembles.
 
 Trains on one cohort (e.g., GEO microarray) and evaluates on a completely
 independent cohort (e.g., TCGA RNA-seq) to demonstrate generalizability.
 
 Implements:
   1. Feature alignment across platforms
-  2. Platt scaling (manual sigmoid calibration via LogisticRegression on
+  2. Column-wise Quantile Normalization (QN) to align target platform (TCGA)
+     distribution with reference training platform (GEO)
+  3. Platt scaling (manual sigmoid calibration via LogisticRegression on
      raw predicted probabilities) to fix cross-platform threshold shift
-  3. Soft-Voting Ensembles (All Models and Top-3 Models) to boost accuracy
+  4. Soft-Voting Ensembles (All Models and Top-3 Models) to boost accuracy
 """
 
 import os
@@ -17,6 +19,7 @@ import joblib
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from scipy.interpolate import interp1d
 from sklearn.metrics import roc_auc_score, accuracy_score, roc_curve, brier_score_loss
 from sklearn.calibration import calibration_curve
 from sklearn.linear_model import LogisticRegression
@@ -44,6 +47,41 @@ def align_features(X_train, X_test):
         X_test_aligned[col] = X_test[col]
 
     return X_test_aligned
+
+
+def quantile_normalize_column(ref_col, target_col):
+    """Map target column quantiles to reference column quantiles."""
+    ref_clean = ref_col.dropna().values
+    if len(ref_clean) == 0:
+        return target_col
+    
+    ref_sorted = np.sort(ref_clean)
+    target_vals = target_col.values
+    n_target = len(target_vals)
+    
+    if n_target <= 1:
+        return target_col
+    
+    ranks = np.argsort(np.argsort(target_vals))
+    percentiles = ranks / (n_target - 1)
+    
+    # Map to reference values using linear interpolation
+    ref_percentiles = np.linspace(0, 1, len(ref_sorted))
+    f_interp = interp1d(ref_percentiles, ref_sorted, kind='linear', fill_value="extrapolate")
+    mapped_vals = f_interp(percentiles)
+    
+    return pd.Series(mapped_vals, index=target_col.index)
+
+
+def quantile_normalize_dataset(X_ref, X_target):
+    """Quantile normalize target dataset to match reference dataset column-by-column."""
+    X_mapped = X_target.copy()
+    common_cols = [c for c in X_ref.columns if c in X_target.columns]
+    
+    for col in common_cols:
+        X_mapped[col] = quantile_normalize_column(X_ref[col], X_target[col])
+        
+    return X_mapped
 
 
 def platt_scale(y_calib, prob_calib, prob_eval):
@@ -132,15 +170,20 @@ def main():
         f"  Cross-Cohort Validation: "
         f"Train on {args.train_dataset.upper()}, "
         f"Test on {args.test_dataset.upper()}\n"
-        f"  With Platt scaling calibration & Soft-Voting Ensembles\n"
+        f"  With Quantile Normalization + Platt Scaling & Ensembles\n"
         f"{'='*75}"
     )
 
+    # 1. Align features
     X_ext_aligned = align_features(X_train_ref, X_ext)
 
-    # --- Split TCGA 50/50: calibration set + evaluation set ---
+    # 2. Quantile normalize TCGA to match GEO column-by-column (feature-level alignment)
+    print("\nApplying column-wise quantile normalization of TCGA features to match GEO reference distribution...")
+    X_ext_aligned_qn = quantile_normalize_dataset(X_train_ref, X_ext_aligned)
+
+    # 3. Split TCGA 50/50: calibration set + evaluation set
     X_calib, X_eval, y_calib, y_eval = train_test_split(
-        X_ext_aligned, y_ext, test_size=0.5, stratify=y_ext, random_state=42
+        X_ext_aligned_qn, y_ext, test_size=0.5, stratify=y_ext, random_state=42
     )
     print(
         f"TCGA split: {len(y_calib)} calibration samples, "
@@ -174,9 +217,9 @@ def main():
         pipeline = joblib.load(model_path)
 
         # ----- RAW (uncalibrated) evaluation on FULL TCGA -----
-        y_pred_raw = pipeline.predict(X_ext_aligned)
+        y_pred_raw = pipeline.predict(X_ext_aligned_qn)
         try:
-            y_prob_raw_full = pipeline.predict_proba(X_ext_aligned)[:, 1]
+            y_prob_raw_full = pipeline.predict_proba(X_ext_aligned_qn)[:, 1]
         except AttributeError:
             y_prob_raw_full = y_pred_raw.astype(float)
 
@@ -351,7 +394,7 @@ def main():
 
     # --- Print summary table ---
     print(f"\n{'='*95}")
-    print("  EXTERNAL VALIDATION SUMMARY (with Platt Scaling Calibration & Ensembles)")
+    print("  EXTERNAL VALIDATION SUMMARY (with QN, Platt Scaling & Ensembles)")
     print(f"{'='*95}")
     print(f"\n{'Model':<30} {'Raw Acc':>8} {'Cal Acc':>8} {'Raw AUC':>8} {'Cal AUC':>8} {'Raw Brier':>10} {'Cal Brier':>10}")
     print("-" * 100)

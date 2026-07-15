@@ -21,7 +21,9 @@ results/*.png
 results/*.csv
 results/*.txt
 results/*.md
-!results/evaluation_results_table.md # Keep the comparison table in git if desired
+
+# Agent prompt files (internal use only, not for repo)
+files/*.md
 
 # IDE settings
 .idea/
