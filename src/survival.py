@@ -37,6 +37,7 @@ def run_survival_analysis(clinical_path, scores_path, results_dir, dataset_name)
     
     # Normalize column names to handle different dataset formats
     # GEO uses: os.event, os.delay_(months), rfs.event, rfs.delay
+    # GSE17538 uses: overall_event_(death_from_any_cause), overall_survival_follow-up_time
     # Expected: os_event, os_time
     rename_map = {}
     for col in clinical.columns:
@@ -48,6 +49,10 @@ def run_survival_analysis(clinical_path, scores_path, results_dir, dataset_name)
             rename_map[col] = 'rfs_event'
         elif col in ('rfs.delay',):
             rename_map[col] = 'rfs_time'
+        elif col == 'overall_event_(death_from_any_cause)':
+            rename_map[col] = 'os_event'
+        elif col == 'overall_survival_follow-up_time':
+            rename_map[col] = 'os_time'
     if rename_map:
         clinical = clinical.rename(columns=rename_map)
         print(f"  Renamed columns: {rename_map}")
@@ -68,9 +73,9 @@ def run_survival_analysis(clinical_path, scores_path, results_dir, dataset_name)
         print(f"Dataset {dataset_name} lacks survival columns (os_time, os_event). Skipping.")
         return
     
-    # Convert string-valued os_event (TCGA uses "DECEASED"/"LIVING") to numeric
+    # Convert string-valued os_event (TCGA uses "DECEASED"/"LIVING", GSE17538 uses "death"/"no death") to numeric
     if merged['os_event'].dtype == object:
-        event_map = {'DECEASED': 1, 'LIVING': 0, 'Dead': 1, 'Alive': 0}
+        event_map = {'DECEASED': 1, 'LIVING': 0, 'Dead': 1, 'Alive': 0, 'death': 1, 'no death': 0}
         merged['os_event'] = merged['os_event'].map(event_map)
         print(f"  Converted string os_event to numeric (mapped: {event_map})")
     
@@ -170,7 +175,7 @@ def main():
     args = parser.parse_args()
     
     # Check which datasets are available
-    datasets = ["geo", "tcga", "cptac", "synthetic"]
+    datasets = ["geo", "geo17538", "geo_pan", "tcga", "tcga_read", "tcga_pan", "cptac", "synthetic"]
     
     for ds in datasets:
         prefix = f"{ds}_" if ds != "dataset" else ""

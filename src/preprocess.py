@@ -102,28 +102,52 @@ def generate_synthetic_data(n_samples=300, n_genes=2000):
     return df_expr, clinical
 
 
-def download_geo_dataset(geo_id="GSE39582", dest_dir="data/raw"):
-    """Download GSE39582 series matrix file from NCBI FTP."""
+def download_geo_dataset(geo_id="GSE39582", dest_dir="data/raw", gpl_id=None):
+    """Download GEO series matrix file from NCBI. Works for any GSE ID.
+    
+    Some datasets use {GSE}_series_matrix.txt.gz, others use {GSE}-{GPL}_series_matrix.txt.gz.
+    If gpl_id is provided, tries the qualified name first, then falls back to unqualified.
+    """
     os.makedirs(dest_dir, exist_ok=True)
-    filepath = os.path.join(dest_dir, f"{geo_id}_series_matrix.txt.gz")
+    filepath_plain = os.path.join(dest_dir, f"{geo_id}_series_matrix.txt.gz")
+    filepath_qual = os.path.join(dest_dir, f"{geo_id}-{gpl_id}_series_matrix.txt.gz") if gpl_id else None
 
-    if os.path.exists(filepath):
-        print(f"[GEO] {geo_id} already cached at {filepath}")
-        return filepath
+    if os.path.exists(filepath_plain):
+        print(f"[GEO] {geo_id} already cached at {filepath_plain}")
+        return filepath_plain
+    if filepath_qual and os.path.exists(filepath_qual):
+        print(f"[GEO] {geo_id} already cached at {filepath_qual}")
+        return filepath_qual
 
-    url = f"https://ftp.ncbi.nlm.nih.gov/geo/series/GSE39nnn/{geo_id}/matrix/{geo_id}_series_matrix.txt.gz"
-    print(f"[GEO] Downloading {geo_id} from {url} ...")
-    try:
-        resp = requests.get(url, stream=True, timeout=120)
-        resp.raise_for_status()
-        with open(filepath, 'wb') as f:
-            for chunk in resp.iter_content(chunk_size=65536):
-                f.write(chunk)
-        print(f"[GEO] Download complete: {filepath}")
-        return filepath
-    except Exception as e:
-        print(f"[GEO] Download failed: {e}")
-        return None
+    # Extract numeric part and compute directory prefix (e.g. 39582 -> GSE39nnn)
+    num_part = geo_id.replace("GSE", "")
+    prefix = f"GSE{num_part[:2]}nnn"
+    
+    urls_to_try = []
+    if gpl_id:
+        urls_to_try.append(
+            f"https://ftp.ncbi.nlm.nih.gov/geo/series/{prefix}/{geo_id}/matrix/{geo_id}-{gpl_id}_series_matrix.txt.gz"
+        )
+    urls_to_try.append(
+        f"https://ftp.ncbi.nlm.nih.gov/geo/series/{prefix}/{geo_id}/matrix/{geo_id}_series_matrix.txt.gz"
+    )
+    
+    for url in urls_to_try:
+        target_path = filepath_qual if gpl_id and f"-{gpl_id}" in url else filepath_plain
+        print(f"[GEO] Trying {url} ...")
+        try:
+            resp = requests.get(url, stream=True, timeout=180)
+            resp.raise_for_status()
+            with open(target_path, 'wb') as f:
+                for chunk in resp.iter_content(chunk_size=65536):
+                    f.write(chunk)
+            print(f"[GEO] Download complete: {target_path}")
+            return target_path
+        except Exception as e:
+            print(f"[GEO] URL failed: {e}")
+    
+    print(f"[GEO] All download attempts failed for {geo_id}.")
+    return None
 
 
 def download_gpl_annotation(gpl_id="GPL570", dest_dir="data/raw"):
@@ -294,15 +318,16 @@ def map_probes_to_genes(expr_df, probe_mapping):
     return expr_gene
 
 
-def load_and_process_geo(data_dir="data"):
+def load_and_process_geo(data_dir="data", geo_id="GSE39582", gpl_id="GPL570"):
     """
-    Download, parse, and process GSE39582 into gene-level expression + clinical data.
+    Download, parse, and process a GEO series into gene-level expression + clinical data.
+    Supports GSE39582 (default) and GSE17538 (same GPL570 platform).
     Returns (expression_df, clinical_df) with gene symbols as column names.
     """
     raw_dir = os.path.join(data_dir, "raw")
 
-    # Download series matrix
-    matrix_path = download_geo_dataset("GSE39582", raw_dir)
+    # Download series matrix (pass gpl_id for platform-qualified filenames)
+    matrix_path = download_geo_dataset(geo_id, raw_dir, gpl_id=gpl_id)
     if matrix_path is None:
         return None, None
 
@@ -319,6 +344,129 @@ def load_and_process_geo(data_dir="data"):
 
     print("[GEO] WARNING: Could not map probes to genes. Returning probe-level data.")
     return expr_probes, clinical
+
+
+def load_and_process_geo_merged(data_dir="data"):
+    """
+    Download and merge GSE39582 + GSE17538 (both GPL570, colon cancer).
+    Returns merged expression + clinical DataFrames with samples row-concatenated
+    and gene columns intersected.
+    """
+    print("=" * 60)
+    print("LOADING GSE39582 (discovery cohort, ~585 samples)")
+    exp1, clin1 = load_and_process_geo(data_dir, "GSE39582")
+
+    print("=" * 60)
+    print("LOADING GSE17538 (validation cohort, ~238 samples)")
+    exp2, clin2 = load_and_process_geo(data_dir, "GSE17538")
+
+    if exp1 is None or exp2 is None:
+        print("[ERROR] Could not load one or both GEO datasets.")
+        return None, None
+
+    # Align on common gene columns
+    common_genes = exp1.columns.intersection(exp2.columns)
+    print(f"Merging on {len(common_genes)} common genes.")
+    exp_merged = pd.concat([exp1[common_genes], exp2[common_genes]], axis=0)
+    clin_merged = pd.concat([clin1, clin2], axis=0)
+
+    print(f"Merged expression: {exp_merged.shape}")
+    return exp_merged, clin_merged
+
+
+def download_tcga_read(dest_dir="data/raw"):
+    """Download TCGA-READ expression and clinical data from UCSC Xena."""
+    os.makedirs(dest_dir, exist_ok=True)
+    expr_path = os.path.join(dest_dir, "tcga_read_expression.tsv.gz")
+    clinical_path = os.path.join(dest_dir, "tcga_read_clinical.tsv")
+
+    expr_url = "https://tcga-xena-hub.s3.us-east-1.amazonaws.com/download/TCGA.READ.sampleMap%2FHiSeqV2.gz"
+    clinical_url = "https://tcga-xena-hub.s3.us-east-1.amazonaws.com/download/TCGA.READ.sampleMap%2FREAD_clinicalMatrix"
+
+    for path, url, name in [(expr_path, expr_url, "expression"), (clinical_path, clinical_url, "clinical")]:
+        if not os.path.exists(path):
+            print(f"[TCGA-READ] Downloading {name} from Xena...")
+            try:
+                r = requests.get(url, timeout=180)
+                r.raise_for_status()
+                with open(path, 'wb') as f:
+                    f.write(r.content)
+                print(f"[TCGA-READ] {name} downloaded: {path}")
+            except Exception as e:
+                print(f"[TCGA-READ] Failed to download {name}: {e}")
+                return None, None
+
+    return expr_path, clinical_path
+
+
+def load_and_process_tcga_read(data_dir="data"):
+    """
+    Download, parse, and process TCGA-READ into expression + clinical DataFrames.
+    Same structure as TCGA-COAD.
+    """
+    raw_dir = os.path.join(data_dir, "raw")
+    expr_path, clinical_path = download_tcga_read(raw_dir)
+
+    if expr_path is None:
+        return None, None
+
+    print(f"[TCGA-READ] Loading expression...")
+    expr = pd.read_csv(expr_path, sep='\t', index_col=0, compression='gzip')
+    expr = expr.T
+    print(f"[TCGA-READ] Expression shape: {expr.shape}")
+
+    print(f"[TCGA-READ] Loading clinical...")
+    clinical = pd.read_csv(clinical_path, sep='\t', index_col=0)
+
+    col_map = {}
+    for c in clinical.columns:
+        cl = c.lower()
+        if 'age' in cl and 'diagnos' in cl:
+            col_map[c] = 'age'
+        elif cl in ('gender', 'gender.demographic'):
+            col_map[c] = 'gender'
+        elif 'pathologic_stage' in cl or 'pathologicstage' in cl.replace('_', ''):
+            col_map[c] = 'stage'
+        elif cl in ('_os', 'os.time', 'days_to_death'):
+            col_map[c] = 'os_time'
+        elif cl in ('_os_ind', 'os.indicator', 'vital_status'):
+            col_map[c] = 'os_event'
+
+    if col_map:
+        clinical = clinical.rename(columns=col_map)
+
+    common = expr.index.intersection(clinical.index)
+    if len(common) > 0:
+        expr = expr.loc[common]
+        clinical = clinical.loc[common]
+
+    print(f"[TCGA-READ] Matched {len(common)} samples.")
+    return expr, clinical
+
+
+def load_and_process_tcga_pan(data_dir="data"):
+    """
+    Merge TCGA-COAD + TCGA-READ into a single pan-colorectal expression + clinical DataFrame.
+    """
+    print("=" * 60)
+    print("LOADING TCGA-COAD (colon adenocarcinoma, ~450 samples)")
+    exp1, clin1 = load_and_process_tcga(data_dir)
+
+    print("=" * 60)
+    print("LOADING TCGA-READ (rectum adenocarcinoma, ~160 samples)")
+    exp2, clin2 = load_and_process_tcga_read(data_dir)
+
+    if exp1 is None or exp2 is None:
+        print("[ERROR] Could not load one or both TCGA datasets.")
+        return None, None
+
+    common_genes = exp1.columns.intersection(exp2.columns)
+    print(f"Merging on {len(common_genes)} common genes.")
+    exp_merged = pd.concat([exp1[common_genes], exp2[common_genes]], axis=0)
+    clin_merged = pd.concat([clin1, clin2], axis=0)
+
+    print(f"Merged expression: {exp_merged.shape}")
+    return exp_merged, clin_merged
 
 
 def download_tcga_coad(dest_dir="data/raw"):
@@ -652,6 +800,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Preprocess datasets for ColoGrowth-ML")
     parser.add_argument("--download", action="store_true", help="Download real GEO + TCGA datasets")
     parser.add_argument("--cptac", action="store_true", help="Download and process CPTAC-COAD dataset")
+    parser.add_argument("--geo-merged", action="store_true", help="Download and merge GSE39582 + GSE17538")
+    parser.add_argument("--tcga-pan", action="store_true", help="Download and merge TCGA-COAD + TCGA-READ")
     parser.add_argument("--synthetic", action="store_true", help="Generate and process synthetic data")
     parser.add_argument("--data-dir", default="data", help="Root data directory")
     args = parser.parse_args()
@@ -662,11 +812,20 @@ if __name__ == "__main__":
         print("=" * 60)
         print("DOWNLOADING AND PROCESSING GSE39582 (GEO)")
         print("=" * 60)
-        geo_expr, geo_clin = load_and_process_geo(args.data_dir)
+        geo_expr, geo_clin = load_and_process_geo(args.data_dir, "GSE39582")
         if geo_expr is not None:
             preprocess_and_save_data(geo_expr, geo_clin, proc_dir, dataset_name="geo")
         else:
             print("[ERROR] Could not load GEO data.")
+
+        print("\n" + "=" * 60)
+        print("DOWNLOADING AND PROCESSING GSE17538 (GEO)")
+        print("=" * 60)
+        geo17538_expr, geo17538_clin = load_and_process_geo(args.data_dir, "GSE17538")
+        if geo17538_expr is not None:
+            preprocess_and_save_data(geo17538_expr, geo17538_clin, proc_dir, dataset_name="geo17538")
+        else:
+            print("[ERROR] Could not load GSE17538 data.")
 
         print("\n" + "=" * 60)
         print("DOWNLOADING AND PROCESSING TCGA-COAD")
@@ -678,6 +837,15 @@ if __name__ == "__main__":
             print("[ERROR] Could not load TCGA data.")
 
         print("\n" + "=" * 60)
+        print("DOWNLOADING AND PROCESSING TCGA-READ")
+        print("=" * 60)
+        tcga_read_expr, tcga_read_clin = load_and_process_tcga_read(args.data_dir)
+        if tcga_read_expr is not None:
+            preprocess_and_save_data(tcga_read_expr, tcga_read_clin, proc_dir, dataset_name="tcga_read")
+        else:
+            print("[ERROR] Could not load TCGA-READ data.")
+
+        print("\n" + "=" * 60)
         print("DOWNLOADING AND PROCESSING CPTAC-COAD")
         print("=" * 60)
         cptac_expr, cptac_clin = load_and_process_cptac(args.data_dir)
@@ -685,6 +853,26 @@ if __name__ == "__main__":
             preprocess_and_save_data(cptac_expr, cptac_clin, proc_dir, dataset_name="cptac")
         else:
             print("[ERROR] Could not load CPTAC data.")
+
+    elif args.geo_merged:
+        print("=" * 60)
+        print("PROCESSING MERGED GEO (GSE39582 + GSE17538)")
+        print("=" * 60)
+        merged_expr, merged_clin = load_and_process_geo_merged(args.data_dir)
+        if merged_expr is not None:
+            preprocess_and_save_data(merged_expr, merged_clin, proc_dir, dataset_name="geo_pan")
+        else:
+            print("[ERROR] Could not load merged GEO data.")
+
+    elif args.tcga_pan:
+        print("=" * 60)
+        print("PROCESSING TCGA PANCOLORECTAL (COAD + READ)")
+        print("=" * 60)
+        merged_expr, merged_clin = load_and_process_tcga_pan(args.data_dir)
+        if merged_expr is not None:
+            preprocess_and_save_data(merged_expr, merged_clin, proc_dir, dataset_name="tcga_pan")
+        else:
+            print("[ERROR] Could not load TCGA pan data.")
 
     elif args.cptac:
         print("=" * 60)

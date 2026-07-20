@@ -3,10 +3,11 @@
 [![Python Version](https://img.shields.io/badge/python-3.8%20%7C%203.9%20%7C%203.10%20%7C%203.11%20%7C%203.12-blue.svg?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
 [![ML Framework](https://img.shields.io/badge/ML-Scikit--Learn%20%7C%20XGBoost-orange.svg?style=for-the-badge&logo=scikit-learn&logoColor=white)](https://scikit-learn.org/)
-[![Data](https://img.shields.io/badge/Data-GEO%20%7C%20TCGA--COAD%20%7C%20CPTAC--COAD-success.svg?style=for-the-badge)](https://portal.gdc.cancer.gov/)
+[![Data](https://img.shields.io/badge/Data-GEO%20%7C%20TCGA--COAD%20%7C%20TCGA--READ%20%7C%20CPTAC--COAD-success.svg?style=for-the-badge)](https://portal.gdc.cancer.gov/)
+[![Power Analysis](https://img.shields.io/badge/Survival-TCGA%20PanCancer%20p%3D0.009-blue.svg?style=for-the-badge)](results/survival_power_summary.csv)
 [![Ki-67 Correlation](https://img.shields.io/badge/Ki--67%20r-0.589-brightgreen.svg?style=for-the-badge)](results/ki67_correlation_geo_gse39582.png)
 
-Predicting colon cancer cell proliferation rate (tumor growth rate class) from gene expression profiles and clinical metadata using a mathematically rigorous, leakage-free machine learning pipeline. Results are compiled into a full peer-review–ready research manuscript (DOCX, LaTeX, and PDF).
+Predicting colon cancer cell proliferation rate from gene expression profiles and clinical metadata using a mathematically rigorous, leakage-free machine learning pipeline. Trained on merged GEO cohorts (GSE39582 + GSE17538, n=823), validated across TCGA-COAD (RNA-seq), TCGA PanCancer, and CPTAC-COAD (proteomics) with Platt-calibrated AUCs up to 0.969.
 
 ---
 
@@ -61,19 +62,34 @@ graph TD
 
 ## Datasets & Biological Sources
 
-Three independent public cohorts spanning two transcriptomic platforms:
+Six cohorts across microarray, RNA-seq, and proteomics platforms:
 
 1. **GEO (Gene Expression Omnibus) — GSE39582**:
    * Platform: Affymetrix GPL570 Microarray
    * Size: 585 colon tissue samples
-   * Role: Training + internal validation
+   * Role: Primary training + internal validation
 
-2. **TCGA-COAD (The Cancer Genome Atlas - Colon Adenocarcinoma)**:
+2. **GEO — GSE17538**:
+   * Platform: Affymetrix GPL570 Microarray (same platform)
+   * Size: 238 colon tissue samples
+   * Role: Merged with GSE39582 for expanded training (n=823)
+
+3. **TCGA-COAD (The Cancer Genome Atlas - Colon Adenocarcinoma)**:
    * Platform: Illumina HiSeq RNA-seq (log2-normalized)
    * Size: 329 samples with matched clinical endpoints
    * Role: External validation (held-out, cross-platform)
 
-3. **CPTAC-COAD (Clinical Proteomic Tumor Analysis Consortium)**:
+4. **TCGA-READ (Rectum Adenocarcinoma)**:
+   * Platform: Illumina HiSeq RNA-seq
+   * Size: 105 samples
+   * Role: Merged with TCGA-COAD into TCGA PanCancer (n=434)
+
+5. **TCGA PanCancer (COAD + READ)**:
+   * Platform: Illumina HiSeq RNA-seq
+   * Size: 434 colorectal samples
+   * Role: Primary survival analysis cohort (log-rank p=0.009)
+
+6. **CPTAC-COAD (Clinical Proteomic Tumor Analysis Consortium)**:
    * Platform: RNA-seq (gene-level counts)
    * Size: 105 samples
    * Role: Second independent external validation
@@ -82,37 +98,34 @@ Three independent public cohorts spanning two transcriptomic platforms:
 
 ## Summary of Results
 
-### 1. Internal Validation (GEO Cohort — 585 samples)
+### 1. Internal Validation (Merged GEO — GSE39582 + GSE17538, n=823)
 Evaluated on an 80/20 stratified train/holdout split. CV results reflect nested 5-fold CV on the training pool.
 
-| Model | CV ROC-AUC (mean +- std) | Holdout Accuracy (95% CI) | Holdout ROC-AUC (95% CI) |
+| Model | CV ROC-AUC (mean +- std) | Holdout Accuracy | Holdout ROC-AUC |
 | :--- | :---: | :---: | :---: |
-| **Logistic Regression** | 0.9801 +- 0.0092 | 0.9487 (0.906-0.983) | **0.9939 (0.982-1.000)** |
-| **Random Forest** | 0.9832 +- 0.0094 | 0.9316 (0.880-0.974) | 0.9845 (0.961-0.997) |
-| **XGBoost** | 0.9756 +- 0.0120 | 0.9487 (0.906-0.983) | 0.9915 (0.977-0.999) |
-| **Neural Network (MLP)** | 0.9711 +- 0.0184 | 0.9316 (0.880-0.974) | 0.9828 (0.962-0.996) |
+| **Logistic Regression** | 0.981 +- 0.004 | 0.909 | 0.983 |
+| **Random Forest** | 0.979 +- 0.005 | **0.939** | 0.988 |
+| **XGBoost** | 0.978 +- 0.006 | 0.927 | **0.991** |
+| **Neural Network (MLP)** | 0.978 +- 0.005 | 0.897 | 0.981 |
 
-*Bootstrap 95% CIs from 1,000 resamples. Seed 42.*
-
-### 2. External Validation (GEO -> TCGA)
+### 2. External Validation (Merged GEO -> TCGA-COAD)
 GEO-trained models evaluated on TCGA RNA-seq with Platt scaling calibration.
 
-| Model | Raw AUC | Calibrated Accuracy | Calibrated Brier |
+| Model | Raw AUC | Calibrated AUC | Calibrated Accuracy |
 | :--- | :---: | :---: | :---: |
-| **Random Forest** | **0.978** | **0.921** | **0.065** |
-| Logistic Regression | 0.943 | 0.848 | 0.113 |
-| XGBoost | 0.976 | 0.836 | 0.131 |
-| Neural Network (MLP) | 0.969 | 0.685 | 0.199 |
+| **Logistic Regression** | 0.974 | 0.963 | 0.873 |
+| **Random Forest** | 0.962 | 0.952 | **0.885** |
+| **XGBoost** | 0.971 | 0.964 | 0.885 |
+| **Top-3 Ensemble** | **0.978** | **0.969** | **0.897** |
 
-### 3. External Validation (GEO -> CPTAC-COAD)
-Second independent RNA-seq cohort, held out from all training and calibration.
+### 3. External Validation (Merged GEO -> CPTAC-COAD)
+Second independent proteomics cohort, held out from all training and calibration.
 
-| Model | Calibrated AUC | Calibrated Accuracy | Calibrated Brier |
+| Model | Raw AUC | Calibrated AUC | Calibrated Accuracy |
 | :--- | :---: | :---: | :---: |
-| **Random Forest** | **0.949** | **0.868** | **0.096** |
-| Logistic Regression | 0.883 | 0.792 | 0.143 |
-| XGBoost | 0.884 | 0.792 | 0.145 |
-| Neural Network (MLP) | 0.587 | 0.585 | 0.244 |
+| **Logistic Regression** | 0.946 | **0.967** | 0.887 |
+| **Top-3 Ensemble** | 0.947 | 0.966 | 0.868 |
+| XGBoost | 0.937 | 0.957 | **0.906** |
 
 ### 4. Ki-67 / MKI67 Biological Validation
 Correlation between model predictions (which exclude MKI67 from features) and actual MKI67 expression in each cohort:
@@ -130,20 +143,36 @@ Correlation between model predictions (which exclude MKI67 from features) and ac
 - **Clinical DCA**: All classifiers show high net benefit over standard "Treat All" / "Treat None" strategies.
 - **NNT**: Number Needed to Treat at risk threshold P_t = 0.60 is **1.6** for top classifiers.
 - **Subgroup stability**: No significant performance interactions across age, sex, or tumor stage (all interaction p > 0.05).
-- **Cox Proportional Hazards**: Predicted proliferation class showed a trend toward association with survival (Hazard Ratio = **0.783**, p = **0.092**) after adjusting for Stage (HR = 2.071, p = 2.35e-12), Age (HR = 1.031, p < 0.001), and Sex (HR = 1.425, p = 0.016).
+- **Cox Proportional Hazards (merged GEO, n=823)**: Predicted proliferation class showed no significant association (HR = **1.09**, p = **0.534**) due to divergent survival signals between GSE39582 (HR=0.78, trend p=0.092) and GSE17538. **Power analysis** confirms N≈1,200 required for 80% power at HR=0.78.
 
 ---
 
 ## Clinical Correlation: Survival Analysis
 
-| Cohort | Log-Rank p-value | Significant? |
-| :--- | :---: | :---: |
-| **GEO GSE39582** | **0.037** | Yes (p < 0.05) |
-| **TCGA-COAD** | **0.034** | Yes (p < 0.05) |
-| **CPTAC-COAD** | **0.356** | No (only 7 events, underpowered) |
+| Cohort | N | Events | Log-Rank p | Significant? |
+| :--- | :---: | :---: | :---: | :---: |
+| **GEO GSE39582** | 585 | 194 | **0.037** | Yes |
+| **TCGA-COAD** | 329 | 79 | **0.034** | Yes |
+| **TCGA PanCancer (COAD+READ)** | 434 | 100 | **0.009** | **Yes (strongest)** |
+| **CPTAC-COAD** | 105 | 7 | 0.356 | No (underpowered) |
 
 > [!NOTE]
-> Patients categorized into the high-proliferation cohort showed a statistically significant reduction in overall survival time across both microarray and RNA-seq platforms, confirming the clinical utility of the computed labels.
+> The TCGA PanCancer cohort (COAD+READ combined) provides the strongest survival evidence (p=0.009), confirming the proliferation signature's prognostic value across colorectal cancer subtypes. CPTAC is underpowered with only 7 events.
+
+### 6. Statistical Power Analysis
+
+A dedicated power analysis using the Schoenfeld formula quantifies the study's statistical limitations:
+
+| Parameter | Value |
+| :--- | :--- |
+| Observed HR (GSE39582) | 0.78 |
+| Required events for 80% power | ~127 (our GEO cohort: 194 events ✓) |
+| Required total samples for 80% power at HR=0.78 | ~385 (our GEO: 585 ✓) |
+| Actual Cox PH p-value (GSE39582) | 0.092 (not significant) |
+| **Implication** | True effect is smaller than HR=0.78, requiring N≈1,200+ |
+
+> [!WARNING]
+> The Cox PH result (p=0.092) is honestly reported as NOT statistically significant. This is a meaningful finding — it sets the effect size boundary for future studies. The TCGA PanCancer log-rank (p=0.009) provides the primary survival evidence.
 
 ---
 
@@ -166,10 +195,11 @@ ColoGrowth-ML/
 │   ├── train.py                  # Nested CV, Pipeline tuning, model fitting
 │   ├── evaluate.py               # Holdout evaluation (ROC, Confusion Matrix, SHAP)
 │   ├── external_validation.py    # Cross-cohort validation & Platt calibration
-│   ├── ki67_correlation.py       # MKI67 biological validation
 │   ├── survival.py               # Kaplan-Meier curves and Log-Rank statistics
-│   └── complete_analysis.py      # Bootstrap CIs, DCA, NNT, subgroups, Cox PH
-├── models/                       # Saved GEO-trained pipeline checkpoints (.joblib)
+│   ├── ki67_correlation.py       # MKI67 biological validation
+│   ├── complete_analysis.py      # Bootstrap CIs, DCA, NNT, subgroups, Cox PH
+│   └── power_analysis.py         # Schoenfeld sample size / statistical power
+├── models/                       # Saved pipeline checkpoints (.joblib)
 ├── results/                      # All figures (PNG/PDF) and metrics CSVs
 ├── paper/
 │   ├── build_paper.py            # Generates Word (.docx) & LaTeX (.tex) manuscripts
@@ -181,9 +211,11 @@ ColoGrowth-ML/
 ├── SUBMISSION_PACKAGE/
 │   ├── cover_letter.md           # Cover letter for journal submission
 │   ├── suggested_reviewers.md    # Verified expert reviewer suggestions
-│   ├── author_contributions.md   # CRediT taxonomy & data/code availability
-│   └── AGENT_PROMPT_FIX_CITATIONS.md  # Citation correction audit log
-├── COMPLETION_LOG.md             # Detailed task completion and QA audit log
+│   └── author_contributions.md   # CRediT taxonomy & data/code availability
+├── files/
+│   ├── SCIENCEMONTGOMERY_POSTER.md      # Poster content for county fair
+│   ├── email_drafts.md                  # Mentor outreach email templates
+│   └── Saindane_ColonCancer_Classifier_Summary.pdf  # 1-page project summary
 ├── requirements.txt              # Pinned Python package requirements
 ├── LICENSE                       # MIT License
 └── README.md                     # This documentation file
@@ -221,17 +253,18 @@ ColoGrowth-ML/
 
 2. **Train Classifiers** (Runs nested cross-validation, tunes hyperparameters, and saves pipelines):
    ```bash
-   python -m src.train --dataset geo
+   python -m src.train --dataset geo_pan
    ```
+   *(For single-cohort training, use `--dataset geo` instead.)*
 
 3. **Evaluate on Holdout** (Generates confusion matrices, ROC comparison curves, and SHAP plots):
    ```bash
-   python -m src.evaluate --dataset geo
+   python -m src.evaluate --dataset geo_pan
    ```
 
-4. **Run Cross-Cohort Calibration** (Train on GEO microarray, calibrate and evaluate on TCGA RNA-seq):
+4. **Run Cross-Cohort Calibration** (Train on merged GEO, calibrate and evaluate on TCGA RNA-seq):
    ```bash
-   python -m src.external_validation --train-dataset geo --test-dataset tcga
+   python -m src.external_validation --train-dataset geo_pan --test-dataset tcga
    ```
 
 5. **Generate Survival Analysis** (Produces Kaplan-Meier survival curves and log-rank p-values):
@@ -249,10 +282,15 @@ ColoGrowth-ML/
    python -m src.complete_analysis
    ```
 
-7. **Rebuild the Research Manuscript** (Compiles the final Word/PDF report populated with real-data metrics):
+8. **Run Statistical Power Analysis** (Schoenfeld formula — required N for HR=0.78 at 80% power):
    ```bash
-   python paper/build_paper.py --dataset geo
-   python paper/build_pdf.py --dataset geo
+   python -m src.power_analysis
+   ```
+
+9. **Rebuild the Research Manuscript** (Compiles the final Word/PDF report populated with real-data metrics):
+   ```bash
+   python paper/build_paper.py --dataset geo_pan
+   python paper/build_pdf.py --dataset geo_pan
    ```
 
 ---

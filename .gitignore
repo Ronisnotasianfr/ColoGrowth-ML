@@ -18,6 +18,7 @@ models/*.joblib
 models/*.pkl
 models/*.keras
 results/*.png
+results/*.pdf
 results/*.csv
 results/*.txt
 results/*.md
@@ -33,6 +34,9 @@ COMPLETION_LOG.md
 
 # Mentor outreach and misc files
 files/
+
+# Submission package (cover letter, reviewers, etc — not code)
+SUBMISSION_PACKAGE/
 
 # IDE settings
 .idea/

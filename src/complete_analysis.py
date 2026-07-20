@@ -569,7 +569,7 @@ def bootstrap_subgroup_interaction(y_test, y_prob, mask_a, mask_b, n_bootstrap=1
     return orig_diff, lower, upper, p_val
 
 
-def run_subgroup_analysis(X_test, y_test, model_names):
+def run_subgroup_analysis(X_test, y_test, model_names, dataset="geo_pan"):
     """Evaluate holdout test metrics stratified by demographics (Age, Sex, Stage) and test for interactions."""
     print("\n--- Subgroup Performance Analysis ---")
     
@@ -593,7 +593,7 @@ def run_subgroup_analysis(X_test, y_test, model_names):
     
     for name in model_names:
         slug = name.lower().replace(' ', '_').replace('(', '').replace(')', '')
-        model_path = os.path.join(MODELS_DIR, f"{slug}_geo.joblib")
+        model_path = os.path.join(MODELS_DIR, f"{slug}_{dataset}.joblib")
         if not os.path.exists(model_path):
             continue
         pipeline = joblib.load(model_path)
@@ -741,13 +741,14 @@ def run_subgroup_analysis(X_test, y_test, model_names):
         print("Stage-stratified survival plots saved.")
 
 
-def run_cox_proportional_hazards():
+def run_cox_proportional_hazards(dataset="geo_pan"):
     """Fit a multivariate Cox Proportional Hazards model to show independent prognostic value."""
-    print("\n--- Cox Proportional Hazards Regression ---")
+    print(f"\n--- Cox Proportional Hazards Regression ({dataset}) ---")
     
-    clinical_path = os.path.join(DATA_DIR, "geo_clinical.csv")
-    target_path = os.path.join(DATA_DIR, "geo_y_target.csv")
-    features_path = os.path.join(DATA_DIR, "geo_X_features.csv")
+    prefix = f"{dataset}_" if dataset != "dataset" else ""
+    clinical_path = os.path.join(DATA_DIR, f"{prefix}clinical.csv")
+    target_path = os.path.join(DATA_DIR, f"{prefix}y_target.csv")
+    features_path = os.path.join(DATA_DIR, f"{prefix}X_features.csv")
     
     if not (os.path.exists(clinical_path) and os.path.exists(target_path) and os.path.exists(features_path)):
         print("Required files for Cox model missing. Skipping.")
@@ -758,7 +759,17 @@ def run_cox_proportional_hazards():
     X = pd.read_csv(features_path, index_col=0)
     
     # Rename columns to standard
-    rename_map = {'os.event': 'os_event', 'os.delay_(months)': 'os_time', 'os.delay': 'os_time'}
+    rename_map = {}
+    for col in clinical.columns:
+        if col in ('os.event',):
+            rename_map[col] = 'os_event'
+        elif col in ('os.delay_(months)', 'os.delay', 'os_delay_months'):
+            rename_map[col] = 'os_time'
+        elif col == 'overall_event_(death_from_any_cause)':
+            rename_map[col] = 'os_event'
+        elif col == 'overall_survival_follow-up_time':
+            rename_map[col] = 'os_time'
+    clinical = clinical.rename(columns=rename_map)
     clinical = clinical.rename(columns=rename_map)
     
     # Extract clinical variables
@@ -804,14 +815,20 @@ def run_cox_proportional_hazards():
 
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser(description="Complete analysis pipeline")
+    parser.add_argument("--dataset", default="geo_pan", choices=["geo", "geo_pan", "tcga", "tcga_pan", "synthetic"])
+    args = parser.parse_args()
+    dataset = args.dataset
+    
     # Load dataset
-    print("Loading data...")
-    prefix = "geo_"
+    print(f"Loading {dataset} data...")
+    prefix = f"{dataset}_"
     x_path = os.path.join(DATA_DIR, f"{prefix}X_features.csv")
     y_path = os.path.join(DATA_DIR, f"{prefix}y_target.csv")
     
     if not os.path.exists(x_path):
-        print(f"Data not found at {x_path}. Run preprocess.py --download first.")
+        print(f"Data not found at {x_path}. Run preprocess.py first.")
         return
         
     X = pd.read_csv(x_path, index_col=0)
@@ -840,7 +857,7 @@ def main():
     # We will generate confusion matrices too
     for name in model_names:
         slug = name.lower().replace(' ', '_').replace('(', '').replace(')', '')
-        model_path = os.path.join(MODELS_DIR, f"{slug}_geo.joblib")
+        model_path = os.path.join(MODELS_DIR, f"{slug}_{dataset}.joblib")
         
         if not os.path.exists(model_path):
             print(f"Trained model not found for {name} at {model_path}.")
@@ -950,7 +967,7 @@ def main():
     run_decision_curve_analysis(y_test, model_probs)
     
     # 9. Subgroup Analysis
-    run_subgroup_analysis(X_test, y_test, loaded_models)
+    run_subgroup_analysis(X_test, y_test, loaded_models, dataset)
     
     # 10. Cox proportional hazards
     run_cox_proportional_hazards()

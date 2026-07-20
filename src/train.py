@@ -256,7 +256,7 @@ def main():
         "--dataset",
         type=str,
         default="geo",
-        choices=["geo", "tcga", "synthetic"],
+        choices=["geo", "geo17538", "geo_pan", "tcga", "tcga_read", "tcga_pan", "synthetic"],
         help="Which dataset to use for training",
     )
     parser.add_argument(
