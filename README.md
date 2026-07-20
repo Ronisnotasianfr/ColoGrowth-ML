@@ -3,7 +3,8 @@
 [![Python Version](https://img.shields.io/badge/python-3.8%20%7C%203.9%20%7C%203.10%20%7C%203.11%20%7C%203.12-blue.svg?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
 [![ML Framework](https://img.shields.io/badge/ML-Scikit--Learn%20%7C%20XGBoost-orange.svg?style=for-the-badge&logo=scikit-learn&logoColor=white)](https://scikit-learn.org/)
-[![Biomedical Data](https://img.shields.io/badge/Data-GEO%20%7C%20TCGA--COAD-success.svg?style=for-the-badge)](https://portal.gdc.cancer.gov/)
+[![Data](https://img.shields.io/badge/Data-GEO%20%7C%20TCGA--COAD%20%7C%20CPTAC--COAD-success.svg?style=for-the-badge)](https://portal.gdc.cancer.gov/)
+[![Ki-67 Correlation](https://img.shields.io/badge/Ki--67%20r-0.589-brightgreen.svg?style=for-the-badge)](results/ki67_correlation_geo_gse39582.png)
 
 Predicting colon cancer cell proliferation rate (tumor growth rate class) from gene expression profiles and clinical metadata using a mathematically rigorous, leakage-free machine learning pipeline. Results are compiled into a full peer-review–ready research manuscript (DOCX, LaTeX, and PDF).
 
@@ -25,7 +26,7 @@ By leveraging gene expression signatures downstream of the primary cell cycle ma
 
 ```mermaid
 graph TD
-    A[Raw Data GEO / TCGA] --> B[preprocess.py]
+    A[Raw Data GEO / TCGA / CPTAC] --> B[preprocess.py]
     B --> C[Compute Proliferation Index Score]
     C --> D[Binarize into High / Low Target]
     B --> E[Remove 10 Proliferation Genes]
@@ -35,15 +36,15 @@ graph TD
     H -.-> |Prevent Data Leakage| I[StandardScaler + VarianceThreshold + SelectKBest]
     I --> J[Fit & Save Models]
     J --> K[external_validation.py]
-    K --> L[Split TCGA into 50/50 Calib/Eval]
-    L --> M[Fit Platt Scaling Calibrator]
-    M --> N[Predict Probabilities & Calibrated Accuracy]
+    K --> L[TCGA + CPTAC Calibrated Validation]
     J --> O[survival.py]
     O --> P[Kaplan-Meier Curves & Log-Rank Test]
-    J --> Q[complete_analysis.py]
-    Q --> R[Bootstrap CIs, DCA, NNT, Subgroups, Cox PH]
-    R --> S[build_paper.py / build_pdf.py]
-    S --> T[DOCX + PDF + LaTeX Manuscript]
+    J --> Q[ki67_correlation.py]
+    Q --> R[MKI67 Correlation Analysis]
+    J --> S[complete_analysis.py]
+    S --> T[Bootstrap CIs, DCA, NNT, Subgroups, Cox PH]
+    T --> U[build_paper.py / build_pdf.py]
+    U --> V[DOCX + PDF + LaTeX Manuscript]
 ```
 
 ### Key Scientific Design Choices
@@ -58,47 +59,72 @@ graph TD
 
 ---
 
-## 🧬 Datasets & Biological Sources
+## Datasets & Biological Sources
 
-We utilize two primary public repositories of cancer genomics to demonstrate cohort-independent generalization:
+Three independent public cohorts spanning two transcriptomic platforms:
 
-1. **GEO (Gene Expression Omnibus) — [GSE39582](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE39582)**:
-   * **Platform**: Affymetrix GPL570 Microarray
-   * **Size**: 585 colon tissue samples, ~22,000 features after probe mapping
-   * **Target**: Binarized at the cohort median (292 Low, 293 High)
+1. **GEO (Gene Expression Omnibus) — GSE39582**:
+   * Platform: Affymetrix GPL570 Microarray
+   * Size: 585 colon tissue samples
+   * Role: Training + internal validation
+
 2. **TCGA-COAD (The Cancer Genome Atlas - Colon Adenocarcinoma)**:
-   * **Platform**: Illumina HiSeq RNA-seq (STAR log2-normalized counts)
-   * **Size**: 322 samples, matched clinical endpoints
-   * **Role**: External validation only — split 50/50 into probability calibration and final evaluation sets
+   * Platform: Illumina HiSeq RNA-seq (log2-normalized)
+   * Size: 329 samples with matched clinical endpoints
+   * Role: External validation (held-out, cross-platform)
+
+3. **CPTAC-COAD (Clinical Proteomic Tumor Analysis Consortium)**:
+   * Platform: RNA-seq (gene-level counts)
+   * Size: 105 samples
+   * Role: Second independent external validation
 
 ---
 
-## 📊 Summary of Results
+## Summary of Results
 
 ### 1. Internal Validation (GEO Cohort — 585 samples)
 Evaluated on an 80/20 stratified train/holdout split. CV results reflect nested 5-fold CV on the training pool.
 
-| Model | CV ROC-AUC (mean ± std) | Holdout Accuracy (95% CI) | Holdout ROC-AUC (95% CI) |
+| Model | CV ROC-AUC (mean +- std) | Holdout Accuracy (95% CI) | Holdout ROC-AUC (95% CI) |
 | :--- | :---: | :---: | :---: |
-| **Logistic Regression** | 0.9801 ± 0.0092 | 0.9487 (0.906–0.983) | **0.9939 (0.982–1.000)** |
-| **Random Forest** | 0.9832 ± 0.0094 | 0.9316 (0.880–0.974) | 0.9845 (0.961–0.997) |
-| **XGBoost** | 0.9756 ± 0.0120 | 0.9487 (0.906–0.983) | 0.9915 (0.977–0.999) |
-| **Neural Network (MLP)** | 0.9711 ± 0.0184 | 0.9316 (0.880–0.974) | 0.9828 (0.962–0.996) |
+| **Logistic Regression** | 0.9801 +- 0.0092 | 0.9487 (0.906-0.983) | **0.9939 (0.982-1.000)** |
+| **Random Forest** | 0.9832 +- 0.0094 | 0.9316 (0.880-0.974) | 0.9845 (0.961-0.997) |
+| **XGBoost** | 0.9756 +- 0.0120 | 0.9487 (0.906-0.983) | 0.9915 (0.977-0.999) |
+| **Neural Network (MLP)** | 0.9711 +- 0.0184 | 0.9316 (0.880-0.974) | 0.9828 (0.962-0.996) |
 
-*Bootstrap 95% CIs computed from 1,000 resamples. All stochastic computations used random seed 42.*
+*Bootstrap 95% CIs from 1,000 resamples. Seed 42.*
 
-### 2. External Validation & Platt Scaling (GEO → TCGA)
-Models trained on GEO microarray evaluated on TCGA RNA-seq. Platt scaling (sigmoid calibrator fit on 50% of TCGA) restored classification accuracy after cross-platform distribution shift.
+### 2. External Validation (GEO -> TCGA)
+GEO-trained models evaluated on TCGA RNA-seq with Platt scaling calibration.
 
-| Model | Raw AUC | Calibrated Accuracy | Calibrated Brier Score |
+| Model | Raw AUC | Calibrated Accuracy | Calibrated Brier |
 | :--- | :---: | :---: | :---: |
-| **XGBoost** | 0.9071 | **0.8364** | 0.1311 |
-| **Ensemble (Top-3 Models)** | 0.9131 | **0.8364** | **0.1307** |
-| **Ensemble (All Models)** | 0.7110 | 0.7091 | 0.2079 |
-| **Neural Network (MLP)** | 0.9685 | 0.6848 | 0.1993 |
-| **Logistic Regression** | 0.9775 | 0.6061 | 0.2212 |
+| **Random Forest** | **0.978** | **0.921** | **0.065** |
+| Logistic Regression | 0.943 | 0.848 | 0.113 |
+| XGBoost | 0.976 | 0.836 | 0.131 |
+| Neural Network (MLP) | 0.969 | 0.685 | 0.199 |
 
-### 3. Advanced Quantitative & Survival Analysis
+### 3. External Validation (GEO -> CPTAC-COAD)
+Second independent RNA-seq cohort, held out from all training and calibration.
+
+| Model | Calibrated AUC | Calibrated Accuracy | Calibrated Brier |
+| :--- | :---: | :---: | :---: |
+| **Random Forest** | **0.949** | **0.868** | **0.096** |
+| Logistic Regression | 0.883 | 0.792 | 0.143 |
+| XGBoost | 0.884 | 0.792 | 0.145 |
+| Neural Network (MLP) | 0.587 | 0.585 | 0.244 |
+
+### 4. Ki-67 / MKI67 Biological Validation
+Correlation between model predictions (which exclude MKI67 from features) and actual MKI67 expression in each cohort:
+
+| Cohort | N | Pearson r | Spearman rho |
+| :--- | :---: | :---: | :---: |
+| **GEO GSE39582** | 585 | **0.589** (p=5e-56) | **0.635** (p=3e-67) |
+| **TCGA-COAD** | 329 | **0.543** (p=1e-26) | **0.382** (p=7e-13) |
+
+*Even though MKI67 was removed from all training features to prevent target leakage, the model's predicted probability strongly correlates with actual MKI67 expression -- confirming the classifier captures genuine proliferation biology, not just the label-defining genes.*
+
+### 5. Advanced Quantitative & Survival Analysis
 
 - **Bootstrap significance**: Logistic Regression top-performing internal model; pairwise AUC differences between models not statistically significant (all p > 0.05).
 - **Clinical DCA**: All classifiers show high net benefit over standard "Treat All" / "Treat None" strategies.
@@ -108,12 +134,13 @@ Models trained on GEO microarray evaluated on TCGA RNA-seq. Platt scaling (sigmo
 
 ---
 
-## 📈 Clinical Correlation: Survival Analysis
+## Clinical Correlation: Survival Analysis
 
 | Cohort | Log-Rank p-value | Significant? |
 | :--- | :---: | :---: |
-| **GEO GSE39582** | **0.037** | ✅ Yes (p < 0.05) |
-| **TCGA-COAD** | **0.034** | ✅ Yes (p < 0.05) |
+| **GEO GSE39582** | **0.037** | Yes (p < 0.05) |
+| **TCGA-COAD** | **0.034** | Yes (p < 0.05) |
+| **CPTAC-COAD** | **0.356** | No (only 7 events, underpowered) |
 
 > [!NOTE]
 > Patients categorized into the high-proliferation cohort showed a statistically significant reduction in overall survival time across both microarray and RNA-seq platforms, confirming the clinical utility of the computed labels.
@@ -139,6 +166,7 @@ ColoGrowth-ML/
 │   ├── train.py                  # Nested CV, Pipeline tuning, model fitting
 │   ├── evaluate.py               # Holdout evaluation (ROC, Confusion Matrix, SHAP)
 │   ├── external_validation.py    # Cross-cohort validation & Platt calibration
+│   ├── ki67_correlation.py       # MKI67 biological validation
 │   ├── survival.py               # Kaplan-Meier curves and Log-Rank statistics
 │   └── complete_analysis.py      # Bootstrap CIs, DCA, NNT, subgroups, Cox PH
 ├── models/                       # Saved GEO-trained pipeline checkpoints (.joblib)
@@ -211,7 +239,12 @@ ColoGrowth-ML/
    python -m src.survival
    ```
 
-6. **Run Advanced Quantitative Analyses** (Bootstrap CIs, DCA, NNT, subgroup validation, Cox PH hazards):
+6. **Run Ki-67 Biological Validation** (Correlates model predictions with MKI67 expression):
+   ```bash
+   python -m src.ki67_correlation
+   ```
+
+7. **Run Advanced Quantitative Analyses** (Bootstrap CIs, DCA, NNT, subgroup validation, Cox PH hazards):
    ```bash
    python -m src.complete_analysis
    ```
