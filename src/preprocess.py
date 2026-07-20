@@ -395,6 +395,145 @@ def load_and_process_tcga(data_dir="data"):
     return expr, clinical
 
 
+def download_cptac_coad(dest_dir="data/raw"):
+    """Download CPTAC COAD RNA-seq, clinical, and survival data from AWS S3."""
+    os.makedirs(dest_dir, exist_ok=True)
+
+    files = {
+        "cptac_coad_rnaseq.txt": "https://cptac-pancancer-data.s3.us-west-2.amazonaws.com/data_freeze_v1.2_reorganized/COAD/COAD_RNAseq_gene_RSEM_coding_UQ_1500_log2_Tumor.txt",
+        "cptac_coad_meta.txt": "https://cptac-pancancer-data.s3.us-west-2.amazonaws.com/data_freeze_v1.2_reorganized/COAD/COAD_meta.txt",
+        "cptac_coad_survival.txt": "https://cptac-pancancer-data.s3.us-west-2.amazonaws.com/data_freeze_v1.2_reorganized/COAD/COAD_survival.txt",
+    }
+
+    paths = {}
+    for fname, url in files.items():
+        path = os.path.join(dest_dir, fname)
+        paths[fname] = path
+        if not os.path.exists(path):
+            print(f"[CPTAC] Downloading {fname} ...")
+            try:
+                r = requests.get(url, timeout=180)
+                r.raise_for_status()
+                with open(path, 'wb') as f:
+                    f.write(r.content)
+                print(f"[CPTAC] Saved {path}")
+            except Exception as e:
+                print(f"[CPTAC] Failed to download {fname}: {e}")
+                paths[fname] = None
+        else:
+            print(f"[CPTAC] {fname} already exists.")
+    return paths
+
+
+def ensembl_to_symbol_batch(ensembl_ids, chunk_size=1000):
+    """
+    Convert Ensembl gene IDs (ENSG...) to HUGO gene symbols using mygene.info API.
+    Strips version suffixes (e.g., '.15') before lookup.
+    """
+    import time
+    clean_ids = [eid.split('.')[0] for eid in ensembl_ids]
+    id_to_symbol = {}
+
+    for i in range(0, len(clean_ids), chunk_size):
+        chunk = clean_ids[i:i + chunk_size]
+        try:
+            r = requests.post(
+                "https://mygene.info/v3/gene",
+                json={'ids': chunk, 'fields': 'symbol', 'species': 'human'},
+                timeout=120,
+            )
+            if r.status_code == 200:
+                for hit in r.json():
+                    if isinstance(hit, dict) and hit.get('symbol'):
+                        id_to_symbol[hit['query']] = hit['symbol']
+                    elif isinstance(hit, str):
+                        pass  # Not found entry is just the ID string
+        except Exception as e:
+            print(f"[CPTAC] mygene API error at batch {i}: {e}")
+        time.sleep(0.3)
+
+    return id_to_symbol
+
+
+def load_and_process_cptac(data_dir="data"):
+    """
+    Download, parse, and process CPTAC COAD into expression + clinical DataFrames.
+    Returns (expression_df, clinical_df) with gene symbols as column names.
+    """
+    raw_dir = os.path.join(data_dir, "raw")
+    paths = download_cptac_coad(raw_dir)
+
+    if any(paths[f] is None for f in paths):
+        print("[CPTAC] One or more downloads failed. Skipping.")
+        return None, None
+
+    # Parse RNA-seq: genes × samples, transpose to samples × genes
+    print(f"[CPTAC] Loading RNA-seq from {paths['cptac_coad_rnaseq.txt']}...")
+    expr = pd.read_csv(paths['cptac_coad_rnaseq.txt'], sep='\t', index_col=0)
+    print(f"[CPTAC] Raw expression: {expr.shape[0]} genes × {expr.shape[1]} samples")
+
+    # Transpose to samples × genes
+    expr = expr.T
+
+    # Map Ensembl IDs to gene symbols
+    ensembl_ids = list(expr.columns)
+    print(f"[CPTAC] Mapping {len(ensembl_ids)} Ensembl IDs to gene symbols...")
+    symbol_map = ensembl_to_symbol_batch(ensembl_ids)
+    mapped_cols = {eid: symbol_map.get(eid.split('.')[0], eid) for eid in expr.columns}
+    expr = expr.rename(columns=mapped_cols)
+
+    # Drop unmapped columns (keep Ensembl IDs if no symbol found) but flag them
+    # Actually drop columns that are still Ensembl IDs (unmapped)
+    unmapped = [c for c in expr.columns if c.startswith('ENSG')]
+    if unmapped:
+        print(f"[CPTAC] Dropping {len(unmapped)} unmapped Ensembl IDs.")
+        expr = expr.drop(columns=unmapped)
+
+    # Deduplicate gene symbols by taking mean
+    expr = expr.groupby(expr.columns, axis=1).mean()
+    print(f"[CPTAC] Expression after symbol mapping: {expr.shape}")
+
+    # Parse clinical meta file (skip second row which is data_type)
+    print(f"[CPTAC] Loading clinical meta from {paths['cptac_coad_meta.txt']}...")
+    meta = pd.read_csv(paths['cptac_coad_meta.txt'], sep='\t', skiprows=[1], index_col=0)
+    print(f"[CPTAC] Meta samples: {meta.shape[0]}")
+
+    # Parse survival
+    print(f"[CPTAC] Loading survival from {paths['cptac_coad_survival.txt']}...")
+    surv = pd.read_csv(paths['cptac_coad_survival.txt'], sep='\t', index_col=0)
+    print(f"[CPTAC] Survival samples: {surv.shape[0]}")
+
+    # Merge clinical data
+    clinical = meta.join(surv, how='inner')
+    print(f"[CPTAC] Merged clinical: {clinical.shape[0]} samples")
+
+    # Rename columns to standard names expected by encode_clinical and survival analysis
+    col_map = {}
+    for c in clinical.columns:
+        cl = c.lower()
+        if cl == 'age':
+            col_map[c] = 'age'
+        elif cl == 'sex':
+            col_map[c] = 'gender'
+        elif cl == 'stage':
+            col_map[c] = 'stage'
+        elif cl == 'os_days':
+            col_map[c] = 'os_time'
+        elif cl == 'os_event':
+            col_map[c] = 'os_event'
+    if col_map:
+        clinical = clinical.rename(columns=col_map)
+
+    # Match samples between expression and clinical
+    common = expr.index.intersection(clinical.index)
+    if len(common) > 0:
+        expr = expr.loc[common]
+        clinical = clinical.loc[common]
+
+    print(f"[CPTAC] Matched {len(common)} samples between expression and clinical.")
+    return expr, clinical
+
+
 def compute_proliferation_score(expr_df):
     """
     Compute proliferation score as the mean z-score of the 10-gene
@@ -512,6 +651,7 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="Preprocess datasets for ColoGrowth-ML")
     parser.add_argument("--download", action="store_true", help="Download real GEO + TCGA datasets")
+    parser.add_argument("--cptac", action="store_true", help="Download and process CPTAC-COAD dataset")
     parser.add_argument("--synthetic", action="store_true", help="Generate and process synthetic data")
     parser.add_argument("--data-dir", default="data", help="Root data directory")
     args = parser.parse_args()
@@ -536,6 +676,25 @@ if __name__ == "__main__":
             preprocess_and_save_data(tcga_expr, tcga_clin, proc_dir, dataset_name="tcga")
         else:
             print("[ERROR] Could not load TCGA data.")
+
+        print("\n" + "=" * 60)
+        print("DOWNLOADING AND PROCESSING CPTAC-COAD")
+        print("=" * 60)
+        cptac_expr, cptac_clin = load_and_process_cptac(args.data_dir)
+        if cptac_expr is not None:
+            preprocess_and_save_data(cptac_expr, cptac_clin, proc_dir, dataset_name="cptac")
+        else:
+            print("[ERROR] Could not load CPTAC data.")
+
+    elif args.cptac:
+        print("=" * 60)
+        print("PROCESSING CPTAC-COAD COHORT")
+        print("=" * 60)
+        cptac_expr, cptac_clin = load_and_process_cptac(args.data_dir)
+        if cptac_expr is not None:
+            preprocess_and_save_data(cptac_expr, cptac_clin, proc_dir, dataset_name="cptac")
+        else:
+            print("[ERROR] Could not load CPTAC data.")
     else:
         # Default: generate synthetic data
         print("Generating synthetic data for pipeline testing...")

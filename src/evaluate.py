@@ -48,8 +48,8 @@ def get_selected_feature_names(pipeline, feature_columns):
 
 def transform_for_interpretation(pipeline, X):
     """Apply all preprocessing steps except the final classifier."""
-    Xt = pipeline.named_steps['scaler'].transform(X)
-    Xt = pipeline.named_steps['var_thresh'].transform(Xt)
+    Xt = pipeline.named_steps['var_thresh'].transform(X)
+    Xt = pipeline.named_steps['scaler'].transform(Xt)
     Xt = pipeline.named_steps['feature_select'].transform(Xt)
     return Xt
 

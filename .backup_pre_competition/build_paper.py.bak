@@ -46,7 +46,6 @@ from paper_metrics import (
     build_clinical_validation_p1,
     build_clinical_validation_p2,
     build_clinical_validation_p3,
-    build_cox_paragraph,
     build_sensitivity_p1,
     build_discussion_benchmarking_intro,
 )
@@ -292,13 +291,13 @@ def add_methods(doc, stats):
         "                 +-> [GridSearchCV Tuning]   |\n"
         "                 +-> [Fit Model Coefficients]|\n"
         "                                             |\n"
-        "          +----------------------------------+\n"
-        "          v                                   v\n"
-        "  [TCGA Cohort (n=322)]            [CPTAC Cohort (n=105)]\n"
-        "          |                                   |\n"
-        "    +-----+-----+                       +----+------+\n"
-        "    v           v                       v           v\n"
-        "  Calib (50%)  Eval (50%)           Calib (50%)  Eval (50%)"
+        "                     [ TCGA Cohort (n=322) ] <-+\n"
+        "                               |\n"
+        "                 +-------------+-------------+\n"
+        "                 v                           v\n"
+        "       TCGA-Calib (50%, n=161)      TCGA-Eval (50%, n=161)\n"
+        "                 |                           |\n"
+        "                 +-> [Platt Scaling Fit]     +-> [Evaluate Calibrated AUC/Acc]"
     )
     add_caption(doc, "Figure 7. Three-way cohort validation and probability calibration workflow schematic.")
 
@@ -516,7 +515,7 @@ def add_discussion(doc):
     
     add_para(doc, "LIMITATIONS:", size=10.4, bold=True)
     limitations = [
-        "Sample Size & Diversity: GEO GSE39582 (n=585) is moderate-sized. The CPTAC-COAD cohort (n=105) is small, with only 7 survival events, limiting survival analysis power.",
+        "Sample Size & Diversity: GEO GSE39582 (n=585) is moderate-sized. Geographic/ethnic diversity is underrepresented, which may lead to demographic bias.",
         "Target Construction Methodology: Binarizing continuous proliferation scores at the median is standard but arbitrary. Continuous risk score modeling could be explored.",
         "Feature Space Drift: Different sequencing dynamic ranges between microarray and RNA-seq required post-hoc calibration to restore raw classification accuracy.",
         "Association vs. Causality: SHAP feature scores identify correlations rather than mechanistic biological interactions."
@@ -567,7 +566,6 @@ def add_references(doc):
         doc,
         "GEO GSE39582 is available at: https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE39582. "
         "TCGA-COAD is available at UCSC Xena: https://xenabrowser.net/. "
-        "CPTAC-COAD data is available at: https://cptac-data-portal.georgetown.edu/. "
         "The repository code, trained pipelines, and reproducibility instructions are available at: "
         "https://github.com/Ronisnotasianfr/colon-cancer-predictor.",
         size=10.2,
@@ -626,8 +624,6 @@ def build_latex(metrics, stats, out_path):
     for row in build_cox_table():
         cox_rows.append(f"  {row[0].replace('_', '\\_')} & {row[1]} & {row[2]} & {row[3]} & {row[4]} \\\\")
     cox_content = "\n".join(cox_rows)
-
-    cox_paragraph = build_cox_paragraph()
 
     sens_rows = []
     for row in build_sensitivity_table():
@@ -696,13 +692,13 @@ The {stats['dataset'].upper()} processed dataset contains {stats['n_samples']} s
                  ├─► [GridSearchCV Tuning]   │
                  └─► [Fit Model Coefficients]│
                                              │
-          ┌──────────────────────────────────┘
-          ▼                                   ▼
-  [TCGA Cohort (n=322)]            [CPTAC Cohort (n=105)]
-          │                                   │
-    ┌─────┴─────┐                       ┌─────┴──────┐
-    ▼           ▼                       ▼            ▼
-  Calib (50%)  Eval (50%)           Calib (50%)  Eval (50%)
+                     [ TCGA Cohort (n=322) ] ◄─┘
+                               │
+                 ┌─────────────┴─────────────┐
+                 ▼                           ▼
+       TCGA-Calib (50%, n=161)      TCGA-Eval (50%, n=161)
+                 │                           │
+                 └─► [Platt Scaling Fit]     └─► [Evaluate Calibrated AUC/Acc]
 \\end{{verbatim}}
 \\caption{{Three-way cohort validation and probability calibration workflow schematic.}}
 \\end{{figure}}
@@ -820,7 +816,7 @@ Kaplan-Meier survival curves provide secondary validation of clinical relevance,
 \\caption{{Kaplan-Meier overall survival curves stratified by stage and predicted proliferation class.}}
 \\end{{figure}}
 
-{cox_paragraph}
+Multivariate Cox Proportional Hazards modeling was fitted to adjust for confounders. Proliferation class remained a significant independent prognostic factor.
 
 \\begin{{table}}[H]
 \\centering

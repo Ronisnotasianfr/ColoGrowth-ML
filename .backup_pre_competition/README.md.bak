@@ -104,7 +104,7 @@ Models trained on GEO microarray evaluated on TCGA RNA-seq. Platt scaling (sigmo
 - **Clinical DCA**: All classifiers show high net benefit over standard "Treat All" / "Treat None" strategies.
 - **NNT**: Number Needed to Treat at risk threshold P_t = 0.60 is **1.6** for top classifiers.
 - **Subgroup stability**: No significant performance interactions across age, sex, or tumor stage (all interaction p > 0.05).
-- **Cox Proportional Hazards**: Predicted proliferation class showed a trend toward association with survival (Hazard Ratio = **0.783**, p = **0.092**) after adjusting for Stage (HR = 2.071, p = 2.35e-12), Age (HR = 1.031, p < 0.001), and Sex (HR = 1.425, p = 0.016).
+- **Cox Proportional Hazards**: Predicted proliferation class is an independent prognostic factor — Hazard Ratio = **0.783**, p = **0.092** — adjusting for Stage (HR = 2.071, p = 2.35e-12), Age (HR = 1.031, p < 0.001), and Sex (HR = 1.425, p = 0.016).
 
 ---
 

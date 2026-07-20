@@ -48,6 +48,18 @@ from paper_metrics import (
     build_benchmarking_table,
     build_methods_split_justification,
     build_discussion_pathway_expansion,
+    build_introduction_p1,
+    build_introduction_p2,
+    build_methods_p1,
+    build_methods_p2,
+    build_interpretation_p1,
+    build_interpretation_p2,
+    build_interpretation_p3,
+    build_clinical_validation_p1,
+    build_clinical_validation_p2,
+    build_clinical_validation_p3,
+    build_sensitivity_p1,
+    build_discussion_benchmarking_intro,
 )
 
 TITLE = "Leakage-Free Machine Learning Classification of Colon Cancer Proliferation from Downstream Transcriptional Signatures: A Cross-Platform Validation Study"
@@ -179,33 +191,13 @@ def build_story(metrics, stats, results_dir):
     story.append(Spacer(1, 10))
 
     h(story, "1. Introduction")
-    p(story,
-      "Cellular proliferation is a major biological hallmark of cancer progression and a primary indicator of "
-      "tumor growth speed. In colon adenocarcinoma (COAD), assessing tumor cell division rates holds profound clinical "
-      "value, directly correlating with patient survival outcomes, disease recurrence probability, and "
-      "sensitivity to chemotherapeutic agents. In standard clinical practice, proliferation is estimated "
-      "via histological staining techniques (e.g., Ki-67 immunohistochemistry) or staging systems. However, "
-      "these manual methods can suffer from inter-observer variability and do not capture the broad, underlying "
-      "transcriptomic changes associated with cell-cycle deregulation. A computational approach using machine learning "
-      "applied to high-throughput gene expression datasets could provide an automated, objective method for tumor growth "
-      "classification and reveal novel transcriptional correlates of aggressive tumor division.")
-    p(story,
-      "This study develops a highly rigorous, leakage-free machine learning framework to classify colon cancer "
-      "samples into high vs. low proliferation states using gene expression profiles (microarray and RNA-seq) "
-      "and clinical covariates. A key challenge addressed is the prevention of target leakage: the 10 hallmark "
-      "proliferation genes utilized to build the target classification metric were completely removed from the feature space "
-      "prior to training. The pipeline compares Logistic Regression, Random Forest, XGBoost, and Multilayer Perceptron "
-      "models, validating internally via nested cross-validation and externally across platforms (microarray to RNA-seq). "
-      "To our knowledge, this is the first leakage-free cross-platform validation of proliferation prediction in COAD.")
+    p(story, build_introduction_p1())
+    p(story, build_introduction_p2())
 
     story.append(PageBreak())
 
     h(story, "2. Materials and Methods")
-    p(story,
-      f"The {stats['dataset'].upper()} processed dataset comprises {stats['n_samples']} samples and "
-      f"{stats['n_features']} features after removing target-defining genes. Clinical covariates include age, sex, and tumor stage. "
-      f"The target label is balanced with {stats['class_balance']}. The dataset was split into an 80% training pool "
-      f"({stats['train_n']} samples) and a 20% stratified holdout test split ({stats['test_n']} samples).")
+    p(story, build_methods_p1(stats))
 
     data_rows = [["Dataset file", "Samples", "Features/columns", "Class balance"]]
     data_rows.extend(list(dataset_table_rows(stats)))
@@ -217,31 +209,26 @@ def build_story(metrics, stats, results_dir):
     
     schem_text = (
         "                     [ GEO Cohort (n=585) ]\n"
-        "                               │\n"
-        "                 ┌─────────────┴─────────────┐\n"
-        "                 ▼                           ▼\n"
+        "                               |\n"
+        "                 +-------------+-------------+\n"
+        "                 v                           v\n"
         "        GEO-Train (80%, n=468)      GEO-Holdout (20%, n=117)\n"
-        "                 │                           │\n"
-        "                 ├─► [Feature Selection]     ├─► [Evaluate Model]\n"
-        "                 ├─► [GridSearchCV Tuning]   │\n"
-        "                 └─► [Fit Model Coefficients]│\n"
-        "                                             │\n"
-        "                     [ TCGA Cohort (n=322) ] ◄─┘\n"
-        "                               │\n"
-        "                 ┌─────────────┴─────────────┐\n"
-        "                 ▼                           ▼\n"
+        "                 |                           |\n"
+        "                 +-> [Feature Selection]     +-> [Evaluate Model]\n"
+        "                 +-> [GridSearchCV Tuning]   |\n"
+        "                 +-> [Fit Model Coefficients]|\n"
+        "                                             |\n"
+        "                     [ TCGA Cohort (n=322) ] <-+\n"
+        "                               |\n"
+        "                 +-------------+-------------+\n"
+        "                 v                           v\n"
         "       TCGA-Calib (50%, n=161)      TCGA-Eval (50%, n=161)\n"
-        "                 │                           │\n"
-        "                 └─► [Platt Scaling Fit]     └─► [Evaluate Calibrated AUC/Acc]"
+        "                 |                           |\n"
+        "                 +-> [Platt Scaling Fit]     +-> [Evaluate Calibrated AUC/Acc]"
     )
     schematic(story, schem_text, "Figure 7. Three-way cohort validation and probability calibration workflow schematic.")
 
-    p(story,
-      "To predict proliferation classes, four classifiers were wrapped in scikit-learn Pipelines to guarantee strict "
-      "data separation during cross-validation. Standard scaling, low-variance feature filtering (threshold = 0.01), "
-      "and SelectKBest feature selection (based on the ANOVA F-value) were fit exclusively on the training folds. "
-      "Hyperparameters were optimized using GridSearchCV on the training pool. Multiple probe IDs mapping to the same "
-      "gene symbol were resolved by averaging expression values.")
+    p(story, build_methods_p2())
     
     p(story, build_methods_leakage_paragraph())
     
@@ -269,11 +256,7 @@ def build_story(metrics, stats, results_dir):
     story.append(PageBreak())
 
     h(story, "4. Interpretation and Biological Readout")
-    p(story,
-      "To open the 'black box' of our machine learning models, we computed SHAP (SHapley Additive exPlanations) values "
-      "for the pipeline-transformed features on the holdout split. These values reflect the marginal contribution of each "
-      "gene feature to the model's final prediction score. Because the 10 direct cell-cycle signature genes were removed, "
-      "the top SHAP features identify novel, indirect gene pathways associated with cancer cell proliferation rates.")
+    p(story, build_interpretation_p1())
 
     gene_rows = [["Rank", "Gene Symbol", "ANOVA F-Score", "CV Selection Frequency"]]
     gene_rows.extend(list(build_top_genes_table()))
@@ -284,10 +267,7 @@ def build_story(metrics, stats, results_dir):
         "Figure 2. Random forest SHAP summary showing feature impact (red/high, blue/low expression) on proliferation class prediction.",
         width=3.95 * inch)
         
-    p(story,
-      "Querying the top 30 SHAP features against KEGG and GO Biological Process databases "
-      "revealed statistically significant enrichment of pathways downstream of primary cell-cycle "
-      "regulation, such as ribosome biogenesis, DNA replication, and mitochondrial translation.")
+    p(story, build_interpretation_p2())
       
     fig(story, results_dir / "pathway_enrichment.png",
         "Figure 3. Enriched biological pathways (FDR < 0.05) representing transcriptomic cascade signatures downstream of cancer cell division.",
@@ -295,9 +275,7 @@ def build_story(metrics, stats, results_dir):
 
     story.append(PageBreak())
 
-    p(story,
-      "To test the clinical utility of our classifiers, we performed Clinical Decision Curve Analysis (DCA). "
-      "All four models offer superior net benefit compared to the 'Treat All' and 'Treat None' strategies.")
+    p(story, build_interpretation_p3())
       
     fig(story, results_dir / "clinical_dca.png",
         "Figure 4. Clinical Decision Curve Analysis comparing Net Benefit of model-guided stratification vs. default intervention strategies.",
@@ -311,11 +289,7 @@ def build_story(metrics, stats, results_dir):
     story.append(PageBreak())
 
     h(story, "5. Demographic Subgroups & Prognostic Validation")
-    p(story,
-      "We performed subgroup analyses to verify that model performance is robust to demographic "
-      "and clinical confounders (age, sex, tumor stage). Table 6 demonstrates consistent holdout accuracy "
-      "and ROC-AUC across all patient sub-cohorts, with bootstrap interaction testing confirming no "
-      "significant differences across strata (p > 0.05).")
+    p(story, build_clinical_validation_p1())
 
     # Table 6: updated to 7 columns!
     sub_rows = [["Subgroup", "N", "Accuracy", "ROC-AUC", "ROC-AUC 95% CI", "Interaction p-value", "Interaction 95% CI"]]
@@ -323,11 +297,7 @@ def build_story(metrics, stats, results_dir):
     table(story, sub_rows, [1.1 * inch, 0.5 * inch, 0.8 * inch, 0.8 * inch, 1.2 * inch, 1.1 * inch, 1.25 * inch],
           "Table 6. Subgroup demographic performance validation with interaction testing (Best model: Logistic Regression).", size=7.2)
 
-    p(story,
-      "Kaplan-Meier survival curves provide secondary validation of clinical relevance, showing overall "
-      "survival curves of cohorts stratified by predicted proliferation class (Figure 5) and further stratified "
-      "by stage (Figure 6). Patients classified as high-proliferation exhibit statistically significant reduction "
-      "in overall survival time.")
+    p(story, build_clinical_validation_p2())
       
     fig(story, results_dir / "kaplan_meier_geo.png",
         "Figure 5. Kaplan-Meier overall survival curves comparing predicted high vs. low proliferation cohorts in GEO.",
@@ -337,9 +307,7 @@ def build_story(metrics, stats, results_dir):
         "Figure 6. Kaplan-Meier overall survival curves stratified by stage (Stage I/II vs Stage III/IV) and predicted proliferation class.",
         width=4.15 * inch)
 
-    p(story,
-      "Multivariate Cox Proportional Hazards modeling was fitted to adjust for confounders. Proliferation class "
-      "remained a significant independent prognostic factor as shown in Table 7.")
+    p(story, build_clinical_validation_p3())
 
     cox_rows = [["Predictor / Covariate", "Coefficient", "Hazard Ratio (HR)", "95% CI", "p-value"]]
     cox_rows.extend(list(build_cox_table()))
@@ -349,10 +317,7 @@ def build_story(metrics, stats, results_dir):
     story.append(PageBreak())
 
     h(story, "6. Pre-Processing Sensitivity & Robustness Analysis")
-    p(story,
-      "Sensitivity analyses were conducted to evaluate model robustness to pre-processing hyperparameter "
-      "selections. Table 8 reports model holdout ROC-AUC across variations in feature selection count (k) "
-      "and variance threshold (VT) filtering, showing stable high performance across all parameter ranges.")
+    p(story, build_sensitivity_p1())
 
     sens_rows = [["SelectKBest k", "Holdout ROC-AUC (k)", "Variance Threshold (VT)", "Features Passed VT", "Holdout ROC-AUC (VT)"]]
     sens_rows.extend(list(build_sensitivity_table()))
@@ -363,7 +328,7 @@ def build_story(metrics, stats, results_dir):
     p(story, build_discussion_paragraph())
 
     # Task 3.1 - Benchmarking Table
-    p(story, "To situate our results, we compared the predictive performance and validation characteristics of ColoGrowth-ML with established prognostic classifiers in colorectal cancer in Table 9.")
+    p(story, build_discussion_benchmarking_intro())
     bench_rows = [["Study", "Year", "Cohort/Platform", "N", "AUC/Accuracy", "Leakage-controlled?", "Cross-platform validated?"]]
     bench_rows.extend(list(build_benchmarking_table()))
     table(story, bench_rows, [1.1 * inch, 0.5 * inch, 1.3 * inch, 0.6 * inch, 1.1 * inch, 1.25 * inch, 1.15 * inch],

@@ -84,8 +84,8 @@ def create_pipeline(model_builder):
     or GridSearchCV, every preprocessing step is refit on training folds only.
     """
     return Pipeline([
-        ('var_thresh', VarianceThreshold(threshold=0.01)),
         ('scaler', StandardScaler()),
+        ('var_thresh', VarianceThreshold(threshold=0.01)),
         ('feature_select', SelectKBest(score_func=f_classif, k=FEATURE_SELECT_K)),
         ('classifier', model_builder()),
     ])
