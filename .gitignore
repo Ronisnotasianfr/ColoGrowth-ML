@@ -22,8 +22,17 @@ results/*.csv
 results/*.txt
 results/*.md
 
-# Agent prompt files (internal use only, not for repo)
-files/*.md
+# Agent / skill files (internal, not part of project)
+.agents/
+.opencode/
+.claude/
+
+# Backup files
+.backup_pre_competition/
+COMPLETION_LOG.md
+
+# Mentor outreach and misc files
+files/
 
 # IDE settings
 .idea/
