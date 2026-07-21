@@ -8,6 +8,8 @@ Workflow (triggered via `python -m src.train --dataset geo`):
   4. Hyperparameter tuning via GridSearchCV on the training pool.
   5. Final fit on full training pool and holdout evaluation on the test split.
   6. Print and export unbiased metrics to results/.
+  7. Uses StabilitySelector (bootstrap-based feature selection) instead of
+     single-shot SelectKBest for robustness to data perturbations.
 """
 
 import os
@@ -22,7 +24,7 @@ from sklearn.model_selection import (
     cross_validate,
 )
 from sklearn.preprocessing import StandardScaler
-from sklearn.feature_selection import VarianceThreshold, SelectKBest, f_classif
+from sklearn.feature_selection import VarianceThreshold, f_classif
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import accuracy_score, roc_auc_score
 
@@ -37,26 +39,35 @@ from src.preprocess import (
     remove_proliferation_genes,
     validate_no_leakage,
 )
+from src.stability_selector import StabilitySelector
 
-# Hyperparameter search spaces
+# Hyperparameter search spaces (StabilitySelector replaces SelectKBest)
 PARAM_GRIDS = {
     'Logistic Regression': {
         'classifier__C': [0.01, 0.1, 1.0, 10.0],
         'classifier__penalty': ['l2'],
+        'feature_select__k': [300, 500],
+        'feature_select__min_pct': [0.3, 0.5],
     },
     'Random Forest': {
         'classifier__n_estimators': [100, 200],
         'classifier__max_depth': [5, 10, None],
         'classifier__min_samples_leaf': [2, 4],
+        'feature_select__k': [300, 500],
+        'feature_select__min_pct': [0.3, 0.5],
     },
     'XGBoost': {
         'classifier__n_estimators': [100, 200],
         'classifier__max_depth': [3, 5, 7],
         'classifier__learning_rate': [0.01, 0.05, 0.1],
+        'feature_select__k': [300, 500],
+        'feature_select__min_pct': [0.3, 0.5],
     },
     'Neural Network (MLP)': {
         'classifier__hidden_layer_sizes': [(128, 64), (256, 128, 64)],
         'classifier__alpha': [0.0001, 0.001],
+        'feature_select__k': [300, 500],
+        'feature_select__min_pct': [0.3, 0.5],
     },
 }
 
@@ -70,6 +81,8 @@ MODEL_BUILDERS = {
 OUTER_CV_SPLITS = 5
 INNER_CV_SPLITS = 3
 FEATURE_SELECT_K = 500
+STABILITY_BOOTSTRAP = 100
+STABILITY_MIN_PCT = 0.5
 
 
 def model_type_slug(model_name: str) -> str:
@@ -80,21 +93,31 @@ def model_type_slug(model_name: str) -> str:
 def create_pipeline(model_builder):
     """
     Build an sklearn Pipeline that chains scaling, variance filtering,
-    feature selection, and classification. When used inside cross_validate
-    or GridSearchCV, every preprocessing step is refit on training folds only.
+    bootstrap-stability-based feature selection, and classification.
+    When used inside cross_validate or GridSearchCV, every preprocessing
+    step is refit on training folds only.
+    StabilitySelector replaces standard SelectKBest — it resamples the
+    training data B=100 times, computes ANOVA F-scores each iteration,
+    and retains features selected in >=50% of bootstrap runs. This yields
+    more robust features in high-dimensional settings (Meinshausen & Buhlmann, 2010).
     """
     return Pipeline([
         ('var_thresh', VarianceThreshold(threshold=0.01)),
         ('scaler', StandardScaler()),
-        ('feature_select', SelectKBest(score_func=f_classif, k=FEATURE_SELECT_K)),
+        ('feature_select', StabilitySelector(
+            k=FEATURE_SELECT_K,
+            n_bootstrap=STABILITY_BOOTSTRAP,
+            min_pct=STABILITY_MIN_PCT,
+            n_jobs=-1,
+        )),
         ('classifier', model_builder()),
     ])
 
 
 def configure_feature_selection(pipeline, n_features):
-    """Set SelectKBest k dynamically when the feature count is small."""
+    """Set StabilitySelector k dynamically when the feature count is small."""
     if n_features < FEATURE_SELECT_K:
-        pipeline.set_params(feature_select__k='all')
+        pipeline.set_params(feature_select__k=n_features // 2)
     return pipeline
 
 

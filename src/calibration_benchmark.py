@@ -8,34 +8,40 @@ from sklearn.calibration import calibration_curve
 from sklearn.linear_model import LogisticRegression
 from sklearn.isotonic import IsotonicRegression
 from sklearn.model_selection import train_test_split
+from joblib import Parallel, delayed
 from src.preprocess import remove_proliferation_genes
 from src.train import MODEL_BUILDERS, model_type_slug
 
-def bootstrap_ece(y_true, y_prob, n_bins=10, n_bootstrap=1000, ci=95):
-    eces = []
-    rng = np.random.default_rng(42)
+def _ece_bootstrap_sample(y_true, y_prob, n_bins, rng_seed):
+    rng = np.random.default_rng(rng_seed)
     n = len(y_true)
-    for _ in range(n_bootstrap):
-        idx = rng.integers(0, n, n)
-        y_boot = y_true[idx]
-        p_boot = y_prob[idx]
-        p_true, p_pred = calibration_curve(y_boot, p_boot, n_bins=n_bins)
-        bin_counts, _ = np.histogram(p_boot, bins=n_bins, range=(0, 1))
-        ece = np.sum(bin_counts / n * np.abs(p_true - p_pred))
-        eces.append(ece)
+    idx = rng.integers(0, n, n)
+    y_boot = y_true[idx]
+    p_boot = y_prob[idx]
+    p_true, p_pred = calibration_curve(y_boot, p_boot, n_bins=n_bins)
+    bin_counts, _ = np.histogram(p_boot, bins=n_bins, range=(0, 1))
+    return np.sum(bin_counts / n * np.abs(p_true - p_pred))
+
+def _brier_bootstrap_sample(y_true, y_prob, rng_seed):
+    rng = np.random.default_rng(rng_seed)
+    n = len(y_true)
+    idx = rng.integers(0, n, n)
+    return brier_score_loss(y_true[idx], y_prob[idx])
+
+def bootstrap_ece(y_true, y_prob, n_bins=10, n_bootstrap=1000, ci=95, n_jobs=-1):
+    seeds = [42 + i for i in range(n_bootstrap)]
+    eces = Parallel(n_jobs=n_jobs)(
+        delayed(_ece_bootstrap_sample)(y_true, y_prob, n_bins, s) for s in seeds
+    )
     lower = np.percentile(eces, (100 - ci) / 2)
     upper = np.percentile(eces, 100 - (100 - ci) / 2)
     return np.mean(eces), lower, upper
 
-def bootstrap_brier(y_true, y_prob, n_bootstrap=1000, ci=95):
-    briers = []
-    rng = np.random.default_rng(42)
-    n = len(y_true)
-    for _ in range(n_bootstrap):
-        idx = rng.integers(0, n, n)
-        y_boot = y_true[idx]
-        p_boot = y_prob[idx]
-        briers.append(brier_score_loss(y_boot, p_boot))
+def bootstrap_brier(y_true, y_prob, n_bootstrap=1000, ci=95, n_jobs=-1):
+    seeds = [42 + i for i in range(n_bootstrap)]
+    briers = Parallel(n_jobs=n_jobs)(
+        delayed(_brier_bootstrap_sample)(y_true, y_prob, s) for s in seeds
+    )
     lower = np.percentile(briers, (100 - ci) / 2)
     upper = np.percentile(briers, 100 - (100 - ci) / 2)
     return np.mean(briers), lower, upper

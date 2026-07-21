@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.stats import mannwhitneyu
+from joblib import Parallel, delayed
 
 plt.style.use('seaborn-v0_8-whitegrid')
 
@@ -70,24 +71,30 @@ def main():
     print(f"  Other cell lines: {len(other_lines)}")
 
     # Group by drug and test: does ln(IC50) differ between colon and other?
-    drug_results = []
-    for (drug_id, drug_name), group in resp.groupby(['DRUG_ID', 'DRUG_NAME']):
-        colon = group[group['Is_Colon']]['LN_IC50'].dropna()
-        other = group[~group['Is_Colon']]['LN_IC50'].dropna()
+    # Parallelized across drugs using joblib
+    def test_drug(group):
+        drug_id, drug_name = group[0]
+        rows = group[1]
+        colon = rows[rows['Is_Colon']]['LN_IC50'].dropna()
+        other = rows[~rows['Is_Colon']]['LN_IC50'].dropna()
         if len(colon) < 3 or len(other) < 3:
-            continue
+            return None
         stat, p = mannwhitneyu(colon, other, alternative='two-sided')
-        mean_diff = colon.mean() - other.mean()
-        drug_results.append({
+        return {
             'DRUG_ID': drug_id,
             'Drug_Name': drug_name,
             'N_Colon': len(colon),
             'N_Other': len(other),
             'Mean_LN_IC50_Colon': colon.mean(),
             'Mean_LN_IC50_Other': other.mean(),
-            'Diff_Colon_vs_Other': mean_diff,
+            'Diff_Colon_vs_Other': colon.mean() - other.mean(),
             'MannWhitney_p': p,
-        })
+        }
+
+    grouped = list(resp.groupby(['DRUG_ID', 'DRUG_NAME']))
+    print(f"  Testing {len(grouped)} drugs in parallel...")
+    results = Parallel(n_jobs=-1)(delayed(test_drug)(g) for g in grouped)
+    drug_results = [r for r in results if r is not None]
 
     df = pd.DataFrame(drug_results)
     n_tests = len(df)

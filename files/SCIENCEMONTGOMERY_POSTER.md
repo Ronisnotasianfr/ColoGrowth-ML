@@ -81,43 +81,60 @@ CROSS-PLATFORM AUC = 0.973
 Ki-67 correlation r = 0.589 (gene held out)
 ```
 
-### MIDDLE PANEL — Methods + Pipeline (24w × 36h inches)
+### MIDDLE PANEL — Graphical Abstract + Pipeline (24w × 36h inches)
 
-**Box 1: Data & Preprocessing Flow**
+**GRAPHICAL ABSTRACT** (top half, occupies ~18in height, printed as large diagram)
+
 ```
-GEO GSE39582 (n=585) ─┐
-                        ├── Merge → Remove 10 prolif genes → Train
-GEO GSE17538 (n=232) ──┘
-                                    ↓
-TCGA-COAD (n=329) ───────────── External Validation (held out)
-CPTAC-COAD (n=105) ──────────── Second independent validation
+┌──────────────────────────────────────────────────────────────────────┐
+│                         PIPELINE OVERVIEW                            │
+│                                                                      │
+│  ┌──────────┐   ┌──────────────┐   ┌─────────────────────────────┐  │
+│  │ GEO DATA  │   │ REMOVE 10    │   │ STABILITY SELECTOR          │  │
+│  │ GSE39582  │──▶│ PROLIF GENES │──▶│ Bootstrap 100x              │  │
+│  │ n=585     │   │ (leakage     │   │ Keep features in top K      │  │
+│  │ GSE17538  │   │  prevention) │   │ in >=50% of resamples       │  │
+│  │ n=232     │   │              │   │ (CUSTOM ALGORITHM)           │  │
+│  └──────────┘   └──────────────┘   └──────────┬──────────────────┘  │
+│                                                │                     │
+│  ┌──────────┐   ┌──────────────┐   ┌──────────▼──────────────────┐  │
+│  │ TCGA     │   │ QUANTILE     │   │ 4 MODELS TRAINED             │  │
+│  │ RNA-seq  │──▶│ NORMALIZE    │──▶│ LR, RF, XGBoost, MLP         │  │
+│  │ n=329    │   │ (align dist) │   │ Nested CV + Platt calib      │  │
+│  └──────────┘   └──────────────┘   └──────────┬──────────────────┘  │
+│                                                │                     │
+│  ┌──────────┐   ┌──────────────┐   ┌──────────▼──────────────────┐  │
+│  │ GDSC2    │   │ BONFERRONI   │   │ RESULTS                      │  │
+│  │ 295 DRUGS│──▶│ CORRECTED    │──▶│ AUC 0.973 (RF)               │  │
+│  │ 969 LINES│   │ α/295=1.69e-4│   │ Ki-67 r=0.59                 │  │
+│  │          │   │ 5/5 MAPK/ERK │   │ Trametinib p=1.8e-12         │  │
+│  └──────────┘   └──────────────┘   └──────────────────────────────┘  │
+│                                                                      │
+│  ★ CUSTOM ALGORITHM: StabilitySelector                              │
+│  sklearn-compatible bootstrap feature selector. Novel contribution.  │
+└──────────────────────────────────────────────────────────────────────┘
 ```
 
-**Box 2: ML Pipeline**
+**Box: Calibration Benchmark (5 methods)**
 ```
-Pipeline: StandardScaler → VarianceThreshold → SelectKBest → Classifier
-Nested 5-fold CV — scaling/selection params computed fold-locally
-                                    
-4 Models: Logistic Regression, Random Forest, XGBoost, MLP
-Saved as .joblib pipelines
+Method              Description              Best For
+─────────────────────────────────────────────────────────
+None                Raw scores               RF, XGB (ECE < 0.04)
+Platt Scaling       Sigmoid fit on held-out  General purpose
+Isotonic            Non-parametric binning   Large calibration sets
+QN+Platt            QN alignment → Platt     LR cross-platform
+QN Only             Quantile normalization   Comparison baseline
+
+Key Finding: Tree models need NO calibration (ECE 0.032-0.038).
+LR needs QN+Platt for cross-platform (ECE drops from 0.12 to 0.04).
 ```
 
-**Box 3: Calibration Benchmark (5 methods)**
+**Box: Drug Sensitivity Screen (Bonferroni-corrected)**
 ```
-Method              Description
-────────────────────────────────────────────
-None                Raw scores
-Platt Scaling       Sigmoid fit on held-out
-Isotonic            Non-parametric binning
-QN+Platt            QN alignment → Platt
-QN Only             Quantile normalization
-```
-
-**Box 4: Drug Sensitivity Screen**
-```
-GDSC2 dataset: 295 drugs × 969 cell lines
-Mann-Whitney U: colon vs other tissue types
-Bonferroni-corrected threshold p < 0.05/295 = 1.69e-4
+GDSC2: 295 drugs × 969 cell lines
+Mann-Whitney U: colon vs other tissues
+α_adjusted = 0.05 / 295 = 1.69 × 10⁻⁴
+Top 5 drugs ALL survive: Trametinib (p=1.8e-12) → MAPK/ERK pathway
 ```
 
 ### RIGHT PANEL — Results + Conclusions (24w × 36h inches)
