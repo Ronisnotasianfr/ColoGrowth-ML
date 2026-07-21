@@ -19,7 +19,10 @@ def _ece_bootstrap_sample(y_true, y_prob, n_bins, rng_seed):
     y_boot = y_true[idx]
     p_boot = y_prob[idx]
     p_true, p_pred = calibration_curve(y_boot, p_boot, n_bins=n_bins)
-    bin_counts, _ = np.histogram(p_boot, bins=n_bins, range=(0, 1))
+    bin_counts, bin_edges = np.histogram(p_boot, bins=n_bins, range=(0, 1))
+    if len(p_true) < n_bins:
+        n_actual = len(p_true)
+        bin_counts, _ = np.histogram(p_boot, bins=n_actual, range=(0, 1))
     return np.sum(bin_counts / n * np.abs(p_true - p_pred))
 
 def _brier_bootstrap_sample(y_true, y_prob, rng_seed):
@@ -48,8 +51,9 @@ def bootstrap_brier(y_true, y_prob, n_bootstrap=1000, ci=95, n_jobs=-1):
 
 def expected_calibration_error(y_true, y_prob, n_bins=10):
     p_true, p_pred = calibration_curve(y_true, y_prob, n_bins=n_bins)
-    bin_counts, _ = np.histogram(y_prob, bins=n_bins, range=(0, 1))
     n = len(y_true)
+    n_actual = len(p_true)
+    bin_counts, _ = np.histogram(y_prob, bins=n_actual, range=(0, 1))
     return np.sum(bin_counts / n * np.abs(p_true - p_pred))
 
 MODEL_NAMES = list(MODEL_BUILDERS.keys())
@@ -120,6 +124,7 @@ def main():
     parser.add_argument('--data-dir', default='data/processed')
     parser.add_argument('--models-dir', default='models')
     parser.add_argument('--results-dir', default='results')
+    parser.add_argument('--n-jobs', type=int, default=-1)
     args = parser.parse_args()
     os.makedirs(args.results_dir, exist_ok=True)
 
@@ -168,12 +173,11 @@ def main():
                 prob_calibrated = prob_eval_raw
             else:
                 prob_calibrated = method_fn(y_cal.values, prob_cal_raw, prob_eval_raw)
-
             metrics = evaluate(y_eval, prob_calibrated)
-            brier_mean, brier_lo, brier_hi = bootstrap_brier(y_eval.values, prob_calibrated)
-            ece_mean, ece_lo, ece_hi = bootstrap_ece(y_eval.values, prob_calibrated)
+            brier_mean, brier_lo, brier_hi = bootstrap_brier(y_eval.values, prob_calibrated, n_jobs=args.n_jobs)
+            ece_mean, ece_lo, ece_hi = bootstrap_ece(y_eval.values, prob_calibrated, n_jobs=args.n_jobs)
             all_rows.append({
-                'Model': name, 'Calibration': method_name,
+                'Model': name, 'Calibration': 'No Calibration' if method_name == 'None' else method_name,
                 'AUC': metrics['AUC'], 'Accuracy': metrics['Accuracy'],
                 'Brier': metrics['Brier'],
                 'ECE': metrics['ECE'],
@@ -186,14 +190,15 @@ def main():
         if ax_idx < 3:
             ax = axes[ax_idx]
             ax.plot([0, 1], [0, 1], '--', color='#999999', linewidth=1.5, label='Perfect')
-            for method_name in ['None', 'Platt Scaling', 'Isotonic Regression']:
-                if method_name == 'None':
+            for method_name in ['No Calibration', 'Platt Scaling', 'Isotonic Regression']:
+                if method_name == 'No Calibration':
                     prob = prob_eval_raw
                 else:
                     fn = CAL_METHODS[method_name]
                     prob = fn(y_cal.values, prob_cal_raw, prob_eval_raw)
                 p_true, p_pred = calibration_curve(y_eval, prob, n_bins=10)
-                ax.plot(p_pred, p_true, 'o-', color=COLORS[method_name], linewidth=2,
+                c = '#2B3A67' if method_name == 'No Calibration' else COLORS.get(method_name, '#999999')
+                ax.plot(p_pred, p_true, 'o-', color=c, linewidth=2,
                         markersize=6, label=method_name)
             ax.set_title(name, fontsize=12, fontweight='bold', color='#2B3A67')
             ax.set_xlabel('Mean predicted probability', fontsize=10)
@@ -218,8 +223,8 @@ def main():
         prob_cal_raw = pipeline.predict_proba(X_cal_raw)[:, 1]
         prob_qp = calibrate_platt(y_cal.values, prob_cal_raw, prob_eval_raw)
         metrics = evaluate(y_eval, prob_qp)
-        brier_mean, brier_lo, brier_hi = bootstrap_brier(y_eval.values, prob_qp)
-        ece_mean, ece_lo, ece_hi = bootstrap_ece(y_eval.values, prob_qp)
+        brier_mean, brier_lo, brier_hi = bootstrap_brier(y_eval.values, prob_qp, n_jobs=args.n_jobs)
+        ece_mean, ece_lo, ece_hi = bootstrap_ece(y_eval.values, prob_qp, n_jobs=args.n_jobs)
         all_rows.append({
             'Model': name, 'Calibration': 'QN+Platt',
             'AUC': metrics['AUC'], 'Accuracy': metrics['Accuracy'],
@@ -237,8 +242,8 @@ def main():
         pipeline = joblib.load(model_path)
         prob_qn = pipeline.predict_proba(X_eval)[:, 1]
         metrics = evaluate(y_eval, prob_qn)
-        brier_mean, brier_lo, brier_hi = bootstrap_brier(y_eval.values, prob_qn)
-        ece_mean, ece_lo, ece_hi = bootstrap_ece(y_eval.values, prob_qn)
+        brier_mean, brier_lo, brier_hi = bootstrap_brier(y_eval.values, prob_qn, n_jobs=args.n_jobs)
+        ece_mean, ece_lo, ece_hi = bootstrap_ece(y_eval.values, prob_qn, n_jobs=args.n_jobs)
         all_rows.append({
             'Model': name, 'Calibration': 'QN Only',
             'AUC': metrics['AUC'], 'Accuracy': metrics['Accuracy'],

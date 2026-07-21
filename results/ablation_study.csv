@@ -1,0 +1,9 @@
+Model,Selector,CV_Accuracy,CV_AUC,Holdout_Accuracy,Holdout_AUC,Features_Selected
+Logistic Regression,SelectKBest (k=500),0.9231 +/- 0.0105,0.9793 +/- 0.0054,0.9487,0.9939,500
+Logistic Regression,"StabilitySelector (B=50, p=0.3)",0.9188 +/- 0.0080,0.9787 +/- 0.0034,0.9487,0.9939,563
+Random Forest,SelectKBest (k=500),0.9209 +/- 0.0168,0.9801 +/- 0.0053,0.9402,0.9880,500
+Random Forest,"StabilitySelector (B=50, p=0.3)",0.9124 +/- 0.0242,0.9780 +/- 0.0060,0.9402,0.9883,563
+XGBoost,SelectKBest (k=500),0.8910 +/- 0.0181,0.9695 +/- 0.0111,0.9487,0.9909,500
+XGBoost,"StabilitySelector (B=50, p=0.3)",0.8910 +/- 0.0209,0.9686 +/- 0.0112,0.9316,0.9901,563
+Neural Network (MLP),SelectKBest (k=500),0.9274 +/- 0.0132,0.9746 +/- 0.0096,0.9316,0.9828,500
+Neural Network (MLP),"StabilitySelector (B=50, p=0.3)",0.9231 +/- 0.0091,0.9767 +/- 0.0031,0.9402,0.9918,563
