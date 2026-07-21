@@ -62,7 +62,7 @@ from paper_metrics import (
     build_discussion_benchmarking_intro,
 )
 
-TITLE = "Leakage-Free Machine Learning Classification of Colon Cancer Proliferation from Downstream Transcriptional Signatures: A Cross-Platform Validation Study"
+TITLE = "Cross-Platform Colon Cancer Proliferation Classification via Leakage-Free ML"
 SUBTITLE = "Independent computational biology research report prepared for peer-reviewed journal submission"
 AUTHOR_LINE = "Rohan Saindane | Independent Research Project | June 2026"
 
@@ -340,19 +340,19 @@ def build_story(metrics, stats, results_dir):
     h(story, "8. Limitations and Future Directions")
     h2(story, "Limitations")
     for item in [
-        "GEO GSE39582 (n=585) is moderate-sized; geographic/ethnic diversity is underrepresented, which may lead to demographic bias.",
-        "Binarizing continuous proliferation scores at the median is standard but arbitrary. Continuous risk score modeling could be explored.",
-        "Different sequencing dynamic ranges between microarray and RNA-seq required post-hoc calibration to restore raw classification accuracy.",
-        "SHAP feature scores identify correlations rather than mechanistic biological interactions.",
+        "GEO GSE39582 (n=585) is moderate. CPTAC-COAD (n=105) has only 7 survival events.",
+        "Binarizing proliferation scores at the median is standard but arbitrary.",
+        "Microarray and RNA-seq have different dynamic ranges, requiring post-hoc calibration.",
+        "SHAP scores reflect correlation, not causation.",
     ]:
         story.append(Paragraph("- " + item, styles["PaperBullet"]))
     story.append(Spacer(1, 4))
 
     h2(story, "Future Work")
     for item in [
-        "Apply the Top-3 Ensemble model prospectively to new COAD patient biopsy cohorts.",
-        "Perform qPCR knock-out assays on top SHAP genes (e.g., RPS3, RPS11) to confirm cellular growth regulation roles.",
-        "Integrate genomic copy number variations (CNVs) and somatic mutation cascades into feature spaces.",
+        "Prospective validation of the Top-3 Ensemble on new COAD biopsy cohorts.",
+        "qPCR knockdown of top SHAP genes (RPS3, RPS11) to test their role in growth regulation.",
+        "Integration of CNVs and somatic mutation data into the feature space.",
     ]:
         story.append(Paragraph("- " + item, styles["PaperBullet"]))
     story.append(Spacer(1, 6))
@@ -380,12 +380,15 @@ def build_story(metrics, stats, results_dir):
       "GEO GSE39582 is available at: https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE39582. "
       "TCGA-COAD is available at UCSC Xena: https://xenabrowser.net/. "
       "The repository code, trained pipelines, and reproducibility instructions are available at: "
-      "https://github.com/Ronisnotasianfr/colon-cancer-predictor.")
+      "https://github.com/Ronisnotasianfr/ColoGrowth-ML.")
 
-    h(story, "Ethical Considerations")
+    h(story, "Ethical Considerations and AI Disclosure")
     p(story,
       "Secondary analysis of de-identified public datasets did not require institutional review board (IRB) "
       "approval. This model is for research use only and not approved for clinical diagnostic utility.")
+    p(story,
+      "Claude (Anthropic) was used as a coding assistant during implementation. All scientific decisions, "
+      "study design, data interpretation, and conclusions are the author's own.")
 
     return story
 

@@ -51,7 +51,7 @@ from paper_metrics import (
     build_discussion_benchmarking_intro,
 )
 
-TITLE = "Leakage-Free Machine Learning Classification of Colon Cancer Proliferation from Downstream Transcriptional Signatures: A Cross-Platform Validation Study"
+TITLE = "Cross-Platform Colon Cancer Proliferation Classification via Leakage-Free ML"
 SUBTITLE = "Independent computational biology research report prepared for peer-reviewed journal submission"
 AUTHOR = "Rohan Saindane"
 DATE = "June 2026"
@@ -516,10 +516,10 @@ def add_discussion(doc):
     
     add_para(doc, "LIMITATIONS:", size=10.4, bold=True)
     limitations = [
-        "Sample Size & Diversity: GEO GSE39582 (n=585) is moderate-sized. The CPTAC-COAD cohort (n=105) is small, with only 7 survival events, limiting survival analysis power.",
-        "Target Construction Methodology: Binarizing continuous proliferation scores at the median is standard but arbitrary. Continuous risk score modeling could be explored.",
-        "Feature Space Drift: Different sequencing dynamic ranges between microarray and RNA-seq required post-hoc calibration to restore raw classification accuracy.",
-        "Association vs. Causality: SHAP feature scores identify correlations rather than mechanistic biological interactions."
+        "Sample size: GEO GSE39582 (n=585) is moderate. CPTAC-COAD (n=105) has only 7 survival events, limiting power.",
+        "Target binarization at the median is standard but arbitrary. Continuous risk scores might work better.",
+        "Microarray and RNA-seq have different dynamic ranges, requiring post-hoc calibration to restore accuracy.",
+        "SHAP scores reflect correlation, not causation."
     ]
     for lim in limitations:
         p = doc.add_paragraph(style="List Bullet")
@@ -529,9 +529,9 @@ def add_discussion(doc):
         
     add_para(doc, "FUTURE WORK:", size=10.4, bold=True)
     future = [
-        "Prospective Clinical Trial: Apply the Top-3 Ensemble model prospectively to new COAD patient biopsy cohorts.",
-        "Wet-lab Validation: Perform qPCR knock-out assays on top SHAP genes (e.g., RPS3, RPS11) to confirm cellular growth regulation roles.",
-        "Multi-omics Integration: Integrate genomic copy number variations (CNVs) and somatic mutation cascades into feature spaces."
+        "Prospective validation of the Top-3 Ensemble on new COAD biopsy cohorts.",
+        "qPCR knockdown of top SHAP genes (RPS3, RPS11) to confirm their role in growth regulation.",
+        "Integration of CNVs and somatic mutation data into the feature space."
     ]
     for fut in future:
         p = doc.add_paragraph(style="List Bullet")
@@ -569,16 +569,23 @@ def add_references(doc):
         "TCGA-COAD is available at UCSC Xena: https://xenabrowser.net/. "
         "CPTAC-COAD data is available at: https://cptac-data-portal.georgetown.edu/. "
         "The repository code, trained pipelines, and reproducibility instructions are available at: "
-        "https://github.com/Ronisnotasianfr/colon-cancer-predictor.",
+        "https://github.com/Ronisnotasianfr/ColoGrowth-ML.",
         size=10.2,
     )
 
-    add_heading(doc, "Ethical Considerations", 1)
+    add_heading(doc, "Ethical Considerations and AI Disclosure", 1)
     add_para(
         doc,
         "Secondary analysis of de-identified public datasets did not require institutional review board (IRB) "
         "approval. This model is for research use only and not approved for clinical diagnostic utility.",
         size=10.2,
+    )
+    add_heading(doc, "AI Assistance", 2)
+    add_para(
+        doc,
+        "Claude (Anthropic) was used as a coding assistant during implementation. All scientific decisions, "
+        "study design, data interpretation, and conclusions are the author's own. Full prompt logs are "
+        "available in the project repository.",
     )
 
 
@@ -662,9 +669,9 @@ def build_latex(metrics, stats, out_path):
 \\end{{abstract}}
 
 \\section{{Introduction}}
-Cell proliferation is a major biological hallmark of cancer progression and a primary indicator of tumor growth speed. In colon adenocarcinoma (COAD), assessing tumor cell division rates holds profound clinical value, directly correlating with patient survival outcomes, disease recurrence probability, and sensitivity to chemotherapeutic agents. In standard clinical practice, proliferation is estimated via histological staining techniques (e.g., Ki-67 immunohistochemistry) or staging systems. However, these manual methods can suffer from inter-observer variability and do not capture the broad, underlying transcriptomic changes associated with cell-cycle deregulation. A computational approach using machine learning applied to high-throughput gene expression datasets could provide an automated, objective method for tumor growth classification and reveal novel transcriptional correlates of aggressive tumor division.
+Cell proliferation correlates with survival, recurrence, and chemotherapy response in colon adenocarcinoma. Clinicians estimate proliferation through Ki-67 staining or staging. These methods have inter-observer variability and miss broader transcriptomic changes from cell-cycle deregulation. Machine learning on gene expression data could provide an automated alternative.
 
-This study develops a highly rigorous, leakage-free machine learning framework to classify colon cancer samples into high vs. low proliferation states using gene expression profiles (microarray and RNA-seq) and clinical covariates. A key challenge addressed is the prevention of target leakage: the 10 hallmark proliferation genes utilized to build the target classification metric were completely removed from the feature space prior to training. The pipeline compares Logistic Regression, Random Forest, XGBoost, and Multilayer Perceptron models, validating internally via nested cross-validation and externally across platforms (microarray to RNA-seq). To our knowledge, this is the first leakage-free cross-platform validation of proliferation prediction in COAD.
+We trained classifiers on microarray data to predict high vs. low proliferation from gene expression and clinical covariates. The ten cell-cycle genes that define the target were removed from features before training. We compared Logistic Regression, Random Forest, XGBoost, and a Multilayer Perceptron using nested CV on microarray data with external validation on an independent RNA-seq cohort.
 
 \\section{{Materials and Methods}}
 The {stats['dataset'].upper()} processed dataset contains {stats['n_samples']} samples and {stats['n_features']} features after signature-gene removal. Clinical covariates include age, sex, and stage. The binary target is balanced with {stats['class_balance']}. An 80/20 stratified split produced a training pool of {stats['train_n']} samples and a holdout test set of {stats['test_n']} samples.
@@ -707,7 +714,7 @@ The {stats['dataset'].upper()} processed dataset contains {stats['n_samples']} s
 \\caption{{Three-way cohort validation and probability calibration workflow schematic.}}
 \\end{{figure}}
 
-Four classifiers were compared: logistic regression, random forest, XGBoost, and a multilayer perceptron. Each model was wrapped in an sklearn Pipeline containing standardization, variance filtering, SelectKBest feature selection, and the classifier. Five-fold stratified cross-validation was performed on the training pool with fold-local preprocessing, followed by GridSearchCV hyperparameter tuning and final holdout evaluation.
+Four classifiers: logistic regression, random forest, XGBoost, and a multilayer perceptron. Each was wrapped in an sklearn Pipeline (standardization, variance filtering, SelectKBest, classifier). Five-fold stratified CV was run on the training pool with fold-local preprocessing, GridSearchCV tuning, and holdout evaluation.
 
 {methods_leakage}
 
@@ -792,7 +799,7 @@ SHAP summaries were generated from pipeline-transformed, leakage-free features. 
 \\end{{table}}
 
 \\section{{Demographic Subgroups \\& Prognostic Validation}}
-We performed subgroup analyses to verify that model performance is robust to demographic and clinical confounders (age, sex, tumor stage). Table 6 demonstrates consistent holdout accuracy and ROC-AUC across all patient sub-cohorts.
+Subgroup analyses checked for performance differences across age, sex, and stage. Accuracy and ROC-AUC were consistent across groups (Table 6).
 
 \\begin{{table}}[H]
 \\centering
@@ -806,7 +813,7 @@ We performed subgroup analyses to verify that model performance is robust to dem
 \\end{{tabular}}
 \\end{{table}}
 
-Kaplan-Meier survival curves provide secondary validation of clinical relevance, showing overall survival curves of cohorts stratified by predicted proliferation class.
+Kaplan-Meier curves compare survival by predicted proliferation class.
 
 \\begin{{figure}}[H]
 \\centering
@@ -835,7 +842,7 @@ Kaplan-Meier survival curves provide secondary validation of clinical relevance,
 \\end{{table}}
 
 \\section{{Pre-Processing Sensitivity \\& Robustness Analysis}}
-Sensitivity analyses were conducted to evaluate model robustness to pre-processing hyperparameter selections. Table 8 reports model holdout ROC-AUC across variations in feature selection count (k) and variance threshold (VT) filtering.
+Sensitivity analyses varied feature selection count (k) and variance threshold (VT). ROC-AUC remained stable across the tested ranges (Table 8).
 
 \\begin{{table}}[H]
 \\centering
@@ -869,17 +876,17 @@ Sensitivity analyses were conducted to evaluate model robustness to pre-processi
 \\section{{Limitations and Future Directions}}
 \\subsection*{{Limitations}}
 \\begin{{itemize}}
-    \\item \\textbf{{Sample Size \\& Diversity}}: GEO GSE39582 (n=585) is moderate-sized; geographic/ethnic diversity is underrepresented, which may lead to demographic bias.
-    \\item \\textbf{{Target Construction}}: Binarizing continuous proliferation scores at the median is standard but arbitrary. Continuous risk score modeling could be explored.
-    \\item \\textbf{{Feature Space Drift}}: Different sequencing dynamic ranges between microarray and RNA-seq required post-hoc calibration to restore raw classification accuracy.
-    \\item \\textbf{{Association vs. Causality}}: SHAP feature scores identify correlations rather than mechanistic biological interactions.
+    \\item Sample size: GEO GSE39582 (n=585) is moderate. CPTAC-COAD (n=105) has only 7 survival events.
+    \\item Binarizing proliferation scores at the median is standard but arbitrary.
+    \\item Microarray and RNA-seq have different dynamic ranges, requiring post-hoc calibration.
+    \\item SHAP scores reflect correlation, not causation.
 \\end{{itemize}}
 
 \\subsection*{{Future Work}}
 \\begin{{itemize}}
-    \\item \\textbf{{Clinical Trial}}: Apply the Top-3 Ensemble model prospectively to new COAD patient biopsy cohorts.
-    \\item \\textbf{{qPCR Validation}}: Perform qPCR knock-out assays on top SHAP genes (e.g., RPS3, RPS11) to confirm cellular growth regulation roles.
-    \\item \\textbf{{Multi-omics Integration}}: Integrate genomic copy number variations (CNVs) and somatic mutation cascades into feature spaces.
+    \\item Prospective validation of the Top-3 Ensemble on new COAD biopsy cohorts.
+    \\item qPCR knockdown of top SHAP genes (RPS3, RPS11) to test their role in growth regulation.
+    \\item Integration of CNVs and somatic mutation data into the feature space.
 \\end{{itemize}}
 
 \\section{{References}}
@@ -899,10 +906,13 @@ Sensitivity analyses were conducted to evaluate model robustness to pre-processi
 \\end{{enumerate}}
 
 \\section*{{Data and Code Availability}}
-GEO GSE39582 is available at: \\url{{https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE39582}}. TCGA-COAD is available at UCSC Xena: \\url{{https://xenabrowser.net/}}. The repository code, trained pipelines, and reproducibility instructions are available at: \\url{{https://github.com/Ronisnotasianfr/colon-cancer-predictor}}.
+GEO GSE39582 is available at: \\url{{https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE39582}}. TCGA-COAD is available at UCSC Xena: \\url{{https://xenabrowser.net/}}. The repository code, trained pipelines, and reproducibility instructions are available at: \\url{{https://github.com/Ronisnotasianfr/ColoGrowth-ML}}.
 
-\\section*{{Ethical Considerations}}
+\\section*{{Ethical Considerations and AI Disclosure}}
 Secondary analysis of de-identified public datasets did not require institutional review board (IRB) approval. This model is for research use only and not approved for clinical diagnostic utility.
+
+\\subsection*{{AI Assistance}}
+Claude (Anthropic) was used as a coding assistant during implementation. All scientific decisions, study design, data interpretation, and conclusions are the author's own. Full prompt logs are available in the project repository.
 
 \\end{{document}}
 """

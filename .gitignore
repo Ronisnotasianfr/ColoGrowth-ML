@@ -11,33 +11,40 @@ venv/
 .venv/
 env/
 
-# Data and models (large files)
+# Large data files (download with preprocess.py or reproduce.sh)
 data/raw/
 data/processed/
+data/gdsc/
+
+# Trained model checkpoints (reproducible via reproduce.sh)
 models/*.joblib
 models/*.pkl
 models/*.keras
+
+# Generated figures (reproducible, but CSVs tracked for judge review)
 results/*.png
 results/*.pdf
-results/*.csv
 results/*.txt
-results/*.md
 
-# Agent / skill files (internal, not part of project)
+# Agent / skill files (internal tooling, not project code)
 .agents/
 .opencode/
 .claude/
 
-# Backup files
+# Backup / temp files
 .backup_pre_competition/
 COMPLETION_LOG.md
-
-# Mentor outreach and misc files
-files/
-
-# Submission package (cover letter, reviewers, etc — not code)
-SUBMISSION_PACKAGE/
 
 # IDE settings
 .idea/
 .vscode/
+
+# Mentor outreach utilities (not project deliverables)
+files/generate_*
+files/START_HERE_*
+files/SESSION_1_*
+files/email_*
+files/HOW_TO_USE_*
+files/AGENT_MASTER_*
+files/Saindane_ColonCancer_Classifier_Summary.pdf
+files/RESEARCH_COMPLETION_*
