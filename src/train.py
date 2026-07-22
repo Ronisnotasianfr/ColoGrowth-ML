@@ -311,9 +311,38 @@ def main():
         print(f"Error: {exc}")
         return
 
+    # Load continuous proliferation scores to re-binarize after split
+    prefix = f"{args.dataset}_" if args.dataset != "dataset" else ""
+    scores_path = os.path.join(args.data_dir, f"{prefix}proliferation_scores.csv")
+    if os.path.exists(scores_path):
+        scores = pd.read_csv(scores_path, index_col=0)['score']
+        # Align indices
+        common_idx = X.index.intersection(scores.index)
+        X = X.loc[common_idx]
+        scores = scores.loc[common_idx]
+        y_original = y.loc[common_idx]
+        print(f"Loaded proliferation scores for {len(common_idx)} samples.")
+    else:
+        scores = None
+        print("No proliferation scores found, using pre-binarized y_target.csv.")
+
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, stratify=y, random_state=42
     )
+
+    # Re-binarize using training-only threshold to prevent label leakage
+    if scores is not None:
+        scores_train = scores.loc[X_train.index]
+        scores_test = scores.loc[X_test.index]
+        train_threshold = scores_train.median()
+        # Log how the training threshold compares to the original all-data threshold
+        orig_threshold = y_original.median()  # approx since y is already binarized
+        print(f"\nBinarization threshold computed from TRAINING data only: {train_threshold:.4f}")
+        print(f"  (Original all-data median was ~{scores.median():.4f})")
+        y_train = (scores_train >= train_threshold).astype(int).values
+        y_test = (scores_test >= train_threshold).astype(int).values
+        print(f"  Re-binarized: train={np.mean(y_train):.1%} high prolif, test={np.mean(y_test):.1%} high prolif")
+
     print(f"\nTrain pool: {X_train.shape[0]} samples | Holdout test: {X_test.shape[0]} samples")
     print(f"Features after leakage removal: {X_train.shape[1]}")
 

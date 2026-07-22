@@ -248,7 +248,6 @@ def run_pathway_enrichment(top_genes):
         
         if len(results) == 0:
             print("No statistically significant pathways found (FDR < 0.05).")
-            # Create a placeholder
             raise Exception("No significant pathways")
             
         results.to_csv(os.path.join(RESULTS_DIR, "pathway_enrichment_results.csv"), index=False)
@@ -275,44 +274,11 @@ def run_pathway_enrichment(top_genes):
         plt.close()
         
     except Exception as exc:
-        print(f"Enrichment service unavailable or failed: {exc}. Using robust pre-calculated biological fallback pathway enrichment table.")
-        
-        # Standard biological pathway enrichment fallback based on research of cell-cycle downstream cascades
-        fallback_data = [
-            {"Gene_Set": "KEGG_2021_Human", "Term": "Ribosome biogenesis in eukaryotes (hsa03008)", "Adjusted P-value": 0.00018, "Genes": "RPS3;RPS11;RPL7;RPS24;RPL19;NOP56;UTP6"},
-            {"Gene_Set": "KEGG_2021_Human", "Term": "DNA replication (hsa03030)", "Adjusted P-value": 0.00085, "Genes": "MCM4;MCM7;FEN1;RFC4;PCNA"},
-            {"Gene_Set": "GO_Biological_Process_2021", "Term": "mitochondrial translation (GO:0032543)", "Adjusted P-value": 0.00140, "Genes": "MRPS18B;MRPL15;MRPL23;MRPS2"},
-            {"Gene_Set": "Reactome_2021", "Term": "Cell Cycle, Mitotic (R-HSA-69278)", "Adjusted P-value": 0.00210, "Genes": "CDK2;CCNE1;CDC25A;PLK1;BUB3"},
-            {"Gene_Set": "KEGG_2021_Human", "Term": "Oxidative phosphorylation (hsa00190)", "Adjusted P-value": 0.00350, "Genes": "NDUFB5;ATP5ME;UQCRQ;COX5B"},
-            {"Gene_Set": "GO_Biological_Process_2021", "Term": "rRNA processing (GO:0006364)", "Adjusted P-value": 0.00620, "Genes": "DKC1;NOP58;BOP1;WDR36"},
-            {"Gene_Set": "Reactome_2021", "Term": "Translation (R-HSA-72766)", "Adjusted P-value": 0.00980, "Genes": "EIF3B;EIF4G1;EEF1A1;RPS6"},
-            {"Gene_Set": "KEGG_2021_Human", "Term": "Mismatch repair (hsa03430)", "Adjusted P-value": 0.01520, "Genes": "MSH2;MSH6;RFC4"},
-            {"Gene_Set": "GO_Biological_Process_2021", "Term": "aerobic respiration (GO:0009060)", "Adjusted P-value": 0.02450, "Genes": "SDHA;DLAT;PDHA1"}
-        ]
-        fallback_df = pd.DataFrame(fallback_data)
-        fallback_df.to_csv(os.path.join(RESULTS_DIR, "pathway_enrichment_results.csv"), index=False)
-        
-        plt.figure(figsize=(9, 4.5))
-        sns.barplot(
-            x=-np.log10(fallback_df['Adjusted P-value']),
-            y=fallback_df['Term'],
-            hue=fallback_df['Term'],
-            palette='crest_r',
-            legend=False
-        )
-        plt.axvline(-np.log10(0.05), color='red', linestyle='--', label='FDR = 0.05')
-        plt.title("Enriched Downstream Biological Pathways (SHAP-selected Genes)")
-        plt.xlabel("-log10(Adjusted P-value)")
-        plt.ylabel("Pathway Term")
-        plt.legend(loc='lower right')
-        plt.tight_layout()
-        plt.savefig(os.path.join(RESULTS_DIR, "pathway_enrichment.png"), dpi=300)
-        plt.savefig(os.path.join(RESULTS_DIR, "pathway_enrichment.pdf"), format='pdf')
-        plt.close()
-        print("Fallback enrichment results plotted and saved.")
+        print(f"Enrichment service unavailable: {exc}. Pathway enrichment results will not be generated.")
+        print("Re-run with a working internet connection to get real enrichment data.")
 
 
-def run_sensitivity_analysis(X, y):
+def run_sensitivity_analysis(X, y, dataset="geo"):
     """Run sensitivity analysis for hyperparameters and feature pre-processing."""
     print("\n--- Running Sensitivity Analyses ---")
     
@@ -364,7 +330,7 @@ def run_sensitivity_analysis(X, y):
         
     # 3. Binarization threshold sensitivity
     # We load raw proliferation scores, binarize at different percentiles, split and compute holdout ROC-AUC
-    scores_path = os.path.join(DATA_DIR, "geo_proliferation_scores.csv")
+    scores_path = os.path.join(DATA_DIR, f"{dataset}_proliferation_scores.csv")
     if os.path.exists(scores_path):
         scores_df = pd.read_csv(scores_path, index_col=0)
         scores = scores_df['score']
@@ -393,8 +359,9 @@ def run_sensitivity_analysis(X, y):
             auc = roc_auc_score(y_te, y_prob)
             bin_results.append(auc)
     else:
+        print("Proliferation scores not found, skipping binarization threshold sensitivity.")
         percentiles = [25, 33, 50, 67, 75]
-        bin_results = [0.991, 0.993, 0.994, 0.992, 0.990] # Fallback standard curves
+        bin_results = []
         
     # Save sensitivity results
     sensitivity_df = pd.DataFrame({
@@ -428,11 +395,17 @@ def run_sensitivity_analysis(X, y):
     axes[1].set_ylabel("Holdout ROC-AUC")
     axes[1].grid(True, linestyle=':', alpha=0.6)
     
-    # Plot binarization
-    axes[2].plot(percentiles, bin_results, '^-', color='#C55A11', linewidth=2)
-    axes[2].set_title("Binarization Threshold Sensitivity")
-    axes[2].set_xlabel("Binarization Percentile")
-    axes[2].set_ylabel("Holdout ROC-AUC")
+    # Plot binarization (only if we have data)
+    if len(bin_results) > 0:
+        axes[2].plot(percentiles, bin_results, '^-', color='#C55A11', linewidth=2)
+        axes[2].set_title("Binarization Threshold Sensitivity")
+        axes[2].set_xlabel("Binarization Percentile")
+        axes[2].set_ylabel("Holdout ROC-AUC")
+    else:
+        axes[2].text(0.5, 0.5, 'No proliferation scores\navailable for this cohort',
+                     ha='center', va='center', transform=axes[2].transAxes,
+                     fontsize=10, color='gray')
+        axes[2].set_title("Binarization Threshold Sensitivity")
     axes[2].grid(True, linestyle=':', alpha=0.6)
     
     plt.suptitle("Model Robustness and Sensitivity Analyses", y=1.02)
@@ -961,7 +934,7 @@ def main():
     run_pathway_enrichment(top_20)
     
     # 7. Sensitivity analysis
-    run_sensitivity_analysis(X, y)
+    run_sensitivity_analysis(X, y, dataset=args.dataset)
     
     # 8. DCA & clinical utility
     run_decision_curve_analysis(y_test, model_probs)
