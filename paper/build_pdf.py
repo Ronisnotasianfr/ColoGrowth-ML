@@ -207,26 +207,15 @@ def build_story(metrics, stats, results_dir):
     # Task 3.3 - Three-way validation split justification
     p(story, build_methods_split_justification())
     
-    schem_text = (
-        "                     [ GEO Cohort (n=585) ]\n"
-        "                               |\n"
-        "                 +-------------+-------------+\n"
-        "                 v                           v\n"
-        "        GEO-Train (80%, n=468)      GEO-Holdout (20%, n=117)\n"
-        "                 |                           |\n"
-        "                 +-> [Feature Selection]     +-> [Evaluate Model]\n"
-        "                 +-> [GridSearchCV Tuning]   |\n"
-        "                 +-> [Fit Model Coefficients]|\n"
-        "                                             |\n"
-        "                     [ TCGA Cohort (n=322) ] <-+\n"
-        "                               |\n"
-        "                 +-------------+-------------+\n"
-        "                 v                           v\n"
-        "       TCGA-Calib (50%, n=161)      TCGA-Eval (50%, n=161)\n"
-        "                 |                           |\n"
-        "                 +-> [Platt Scaling Fit]     +-> [Evaluate Calibrated AUC/Acc]"
-    )
-    schematic(story, schem_text, "Figure 7. Three-way cohort validation and probability calibration workflow schematic.")
+    # Replace with clean table-based workflow description
+    workflow_rows = [
+        ["Stage", "Cohort", "Split / Purpose"],
+        ["Training", "GEO (n=585)", "80% training pool (5-fold CV) + 20% holdout"],
+        ["External validation", "TCGA-COAD (n=322)", "50% Platt calibration + 50% evaluation"],
+        ["External validation", "CPTAC-COAD (n=105)", "50% Platt calibration + 50% evaluation"],
+    ]
+    table(story, workflow_rows, [1.2 * inch, 1.5 * inch, 2.8 * inch],
+          "Figure 7. Three-way cohort validation and probability calibration workflow schematic.")
 
     p(story, build_methods_p2())
     
@@ -342,6 +331,7 @@ def build_story(metrics, stats, results_dir):
     for item in [
         "GEO GSE39582 (n=585) is moderate. CPTAC-COAD (n=105) has only 7 survival events.",
         "Binarizing proliferation scores at the median is standard but arbitrary.",
+        "The median-split proliferation classes barely overlap (Cohen's d = 2.3), making binary separation easier than typical clinical ML tasks.",
         "Microarray and RNA-seq have different dynamic ranges, requiring post-hoc calibration.",
         "SHAP scores reflect correlation, not causation.",
     ]:
@@ -370,7 +360,14 @@ def build_story(metrics, stats, results_dir):
         "Langston, L. D. et al. Mcm10 promotes rapid isomerization of CMG-DNA for replisome bypass of lagging strand DNA blocks. eLife, 2017. DOI: 10.7554/eLife.29118",
         "Bharadwaj, R., Qi, W., and Yu, H. Identification of two novel components of the human NDC80 kinetochore complex. Journal of Biological Chemistry, 2004. DOI: 10.1074/jbc.M310224200",
         "Seipold, S. et al. Non-SMC condensin I complex proteins control chromosome segregation and survival of proliferating cells in the zebrafish neural retina. BMC Developmental Biology, 2009. DOI: 10.1186/1471-213X-9-40",
-        "Overmeer, R. M. et al. Replication factor C recruits DNA polymerase delta to sites of nucleotide excision repair but is not required for PCNA recruitment. Molecular and Cellular Biology, 2010. DOI: 10.1128/MCB.00285-10"
+        "Overmeer, R. M. et al. Replication factor C recruits DNA polymerase delta to sites of nucleotide excision repair but is not required for PCNA recruitment. Molecular and Cellular Biology, 2010. DOI: 10.1128/MCB.00285-10",
+        "Guinney, J. et al. The consensus molecular subtypes of colorectal cancer. Nature Medicine, 2015. DOI: 10.1038/nm.3967",
+        "The Cancer Genome Atlas Network. Comprehensive molecular characterization of human colon and rectal cancer. Nature, 2012. DOI: 10.1038/nature11252",
+        "Platt, J. Probabilistic outputs for support vector machines and comparisons to regularized likelihood methods. Advances in Large Margin Classifiers, 1999.",
+        "Yang, W. et al. Genomics of Drug Sensitivity in Cancer (GDSC): a resource for therapeutic biomarker discovery in cancer cells. Nucleic Acids Research, 2013. DOI: 10.1093/nar/gks1111",
+        "Meinshausen, N. and Buhlmann, P. Stability selection. Journal of the Royal Statistical Society: Series B, 2010. DOI: 10.1111/j.1467-9868.2010.00740.x",
+        "Cohen, J. Statistical Power Analysis for the Behavioral Sciences. 2nd ed. Lawrence Erlbaum Associates, 1988.",
+        "Vasaikar, S. et al. Proteogenomic analysis of human colon cancer reveals new therapeutic opportunities. Cell, 2019. DOI: 10.1016/j.cell.2019.03.030"
     ]
     for i, ref in enumerate(refs, 1):
         story.append(Paragraph(f"{i}. {ref}", styles["Ref"]))
@@ -379,6 +376,7 @@ def build_story(metrics, stats, results_dir):
     p(story,
       "GEO GSE39582 is available at: https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE39582. "
       "TCGA-COAD is available at UCSC Xena: https://xenabrowser.net/. "
+      "CPTAC-COAD is available at: https://cptac-data-portal.georgetown.edu/. "
       "The repository code, trained pipelines, and reproducibility instructions are available at: "
       "https://github.com/Ronisnotasianfr/ColoGrowth-ML.")
 
@@ -387,8 +385,11 @@ def build_story(metrics, stats, results_dir):
       "Secondary analysis of de-identified public datasets did not require institutional review board (IRB) "
       "approval. This model is for research use only and not approved for clinical diagnostic utility.")
     p(story,
-      "Claude (Anthropic) was used as a coding assistant during implementation. All scientific decisions, "
-      "study design, data interpretation, and conclusions are the author's own.")
+      "Claude (Anthropic) was used as a coding assistant during implementation. All study design "
+      "decisions, data interpretation, statistical analysis, and written conclusions are the author's "
+      "own. The model architecture, leakage-control strategy, and validation framework were designed "
+      "by the author. Claude assisted with debugging syntax errors, generating table formats, and "
+      "optimizing parallel computation settings. Full prompt logs are available in the project repository.")
 
     return story
 

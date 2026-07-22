@@ -282,23 +282,13 @@ def add_methods(doc, stats):
     add_para(doc, "The three-way validation data-flow schematic is detailed in Figure 7.", size=10.4)
     add_ascii_schematic(
         doc,
-        "                     [ GEO Cohort (n=585) ]\n"
-        "                               |\n"
-        "                 +-------------+-------------+\n"
-        "                 v                           v\n"
-        "        GEO-Train (80%, n=468)      GEO-Holdout (20%, n=117)\n"
-        "                 |                           |\n"
-        "                 +-> [Feature Selection]     +-> [Evaluate Model]\n"
-        "                 +-> [GridSearchCV Tuning]   |\n"
-        "                 +-> [Fit Model Coefficients]|\n"
-        "                                             |\n"
-        "          +----------------------------------+\n"
-        "          v                                   v\n"
-        "  [TCGA Cohort (n=322)]            [CPTAC Cohort (n=105)]\n"
-        "          |                                   |\n"
-        "    +-----+-----+                       +----+------+\n"
-        "    v           v                       v           v\n"
-        "  Calib (50%)  Eval (50%)           Calib (50%)  Eval (50%)"
+        "GEO Cohort (n=585):\n"
+        "    Training Pool (80%, n=468, 5-fold CV)\n"
+        "    Holdout (20%, n=117, final evaluation)\n"
+        "\n"
+        "External Validation (RNA-seq platforms):\n"
+        "    TCGA-COAD (n=322):  50% Platt calibration + 50% evaluation\n"
+        "    CPTAC-COAD (n=105): 50% Platt calibration + 50% evaluation"
     )
     add_caption(doc, "Figure 7. Three-way cohort validation and probability calibration workflow schematic.")
 
@@ -518,6 +508,7 @@ def add_discussion(doc):
     limitations = [
         "Sample size: GEO GSE39582 (n=585) is moderate. CPTAC-COAD (n=105) has only 7 survival events, limiting power.",
         "Target binarization at the median is standard but arbitrary. Continuous risk scores might work better.",
+        "The median-split proliferation classes barely overlap (Cohen's d = 2.3), making binary separation easier than typical clinical ML tasks.",
         "Microarray and RNA-seq have different dynamic ranges, requiring post-hoc calibration to restore accuracy.",
         "SHAP scores reflect correlation, not causation."
     ]
@@ -554,7 +545,14 @@ def add_references(doc):
         "Langston, L. D. et al. Mcm10 promotes rapid isomerization of CMG-DNA for replisome bypass of lagging strand DNA blocks. eLife, 2017. DOI: 10.7554/eLife.29118",
         "Bharadwaj, R., Qi, W., and Yu, H. Identification of two novel components of the human NDC80 kinetochore complex. Journal of Biological Chemistry, 2004. DOI: 10.1074/jbc.M310224200",
         "Seipold, S. et al. Non-SMC condensin I complex proteins control chromosome segregation and survival of proliferating cells in the zebrafish neural retina. BMC Developmental Biology, 2009. DOI: 10.1186/1471-213X-9-40",
-        "Overmeer, R. M. et al. Replication factor C recruits DNA polymerase delta to sites of nucleotide excision repair but is not required for PCNA recruitment. Molecular and Cellular Biology, 2010. DOI: 10.1128/MCB.00285-10"
+        "Overmeer, R. M. et al. Replication factor C recruits DNA polymerase delta to sites of nucleotide excision repair but is not required for PCNA recruitment. Molecular and Cellular Biology, 2010. DOI: 10.1128/MCB.00285-10",
+        "Guinney, J. et al. The consensus molecular subtypes of colorectal cancer. Nature Medicine, 2015. DOI: 10.1038/nm.3967",
+        "The Cancer Genome Atlas Network. Comprehensive molecular characterization of human colon and rectal cancer. Nature, 2012. DOI: 10.1038/nature11252",
+        "Platt, J. Probabilistic outputs for support vector machines and comparisons to regularized likelihood methods. Advances in Large Margin Classifiers, 1999.",
+        "Yang, W. et al. Genomics of Drug Sensitivity in Cancer (GDSC): a resource for therapeutic biomarker discovery in cancer cells. Nucleic Acids Research, 2013. DOI: 10.1093/nar/gks1111",
+        "Meinshausen, N. and Buhlmann, P. Stability selection. Journal of the Royal Statistical Society: Series B, 2010. DOI: 10.1111/j.1467-9868.2010.00740.x",
+        "Cohen, J. Statistical Power Analysis for the Behavioral Sciences. 2nd ed. Lawrence Erlbaum Associates, 1988.",
+        "Vasaikar, S. et al. Proteogenomic analysis of human colon cancer reveals new therapeutic opportunities. Cell, 2019. DOI: 10.1016/j.cell.2019.03.030"
     ]
     for ref in refs:
         p = doc.add_paragraph(style="List Number")
@@ -583,9 +581,12 @@ def add_references(doc):
     add_heading(doc, "AI Assistance", 2)
     add_para(
         doc,
-        "Claude (Anthropic) was used as a coding assistant during implementation. All scientific decisions, "
-        "study design, data interpretation, and conclusions are the author's own. Full prompt logs are "
-        "available in the project repository.",
+        "Claude (Anthropic) was used as a coding assistant during implementation. All study design "
+        "decisions, data interpretation, statistical analysis, and written conclusions are the author's "
+        "own. The model architecture, leakage-control strategy, and validation framework were designed "
+        "by the author. Claude assisted with debugging syntax errors, generating table formats, and "
+        "optimizing parallel computation settings. Full prompt logs are available in the project "
+        "repository.",
     )
 
 
@@ -669,9 +670,9 @@ def build_latex(metrics, stats, out_path):
 \\end{{abstract}}
 
 \\section{{Introduction}}
-Cell proliferation correlates with survival, recurrence, and chemotherapy response in colon adenocarcinoma. Clinicians estimate proliferation through Ki-67 staining or staging. These methods have inter-observer variability and miss broader transcriptomic changes from cell-cycle deregulation. Machine learning on gene expression data could provide an automated alternative.
+{build_introduction_p1()}
 
-We trained classifiers on microarray data to predict high vs. low proliferation from gene expression and clinical covariates. The ten cell-cycle genes that define the target were removed from features before training. We compared Logistic Regression, Random Forest, XGBoost, and a Multilayer Perceptron using nested CV on microarray data with external validation on an independent RNA-seq cohort.
+{build_introduction_p2()}
 
 \\section{{Materials and Methods}}
 The {stats['dataset'].upper()} processed dataset contains {stats['n_samples']} samples and {stats['n_features']} features after signature-gene removal. Clinical covariates include age, sex, and stage. The binary target is balanced with {stats['class_balance']}. An 80/20 stratified split produced a training pool of {stats['train_n']} samples and a holdout test set of {stats['test_n']} samples.
@@ -690,31 +691,21 @@ The {stats['dataset'].upper()} processed dataset contains {stats['n_samples']} s
 
 {methods_split}
 
-\\begin{{figure}}[H]
+\\begin{{table}}[H]
 \\centering
-\\begin{{verbatim}}
-                     [ GEO Cohort (n=585) ]
-                               │
-                 ┌─────────────┴─────────────┐
-                 ▼                           ▼
-        GEO-Train (80%, n=468)      GEO-Holdout (20%, n=117)
-                 │                           │
-                 ├─► [Feature Selection]     ├─► [Evaluate Model]
-                 ├─► [GridSearchCV Tuning]   │
-                 └─► [Fit Model Coefficients]│
-                                             │
-          ┌──────────────────────────────────┘
-          ▼                                   ▼
-  [TCGA Cohort (n=322)]            [CPTAC Cohort (n=105)]
-          │                                   │
-    ┌─────┴─────┐                       ┌─────┴──────┐
-    ▼           ▼                       ▼            ▼
-  Calib (50%)  Eval (50%)           Calib (50%)  Eval (50%)
-\\end{{verbatim}}
-\\caption{{Three-way cohort validation and probability calibration workflow schematic.}}
-\\end{{figure}}
+\\caption{{Three-way cohort validation and probability calibration workflow.}}
+\\begin{{tabular}}{{lll}}
+\\toprule
+\\textbf{{Stage}} & \\textbf{{Cohort}} & \\textbf{{Split / Purpose}} \\\\
+\\midrule
+Training & GEO (n=585) & 80\\% training pool (5-fold CV) + 20\\% holdout \\\\
+External validation & TCGA-COAD (n=322) & 50\\% Platt calibration + 50\\% evaluation \\\\
+External validation & CPTAC-COAD (n=105) & 50\\% Platt calibration + 50\\% evaluation \\\\
+\\bottomrule
+\\end{{tabular}}
+\\end{{table}}
 
-Four classifiers: logistic regression, random forest, XGBoost, and a multilayer perceptron. Each was wrapped in an sklearn Pipeline (standardization, variance filtering, SelectKBest, classifier). Five-fold stratified CV was run on the training pool with fold-local preprocessing, GridSearchCV tuning, and holdout evaluation.
+{build_methods_p2()}
 
 {methods_leakage}
 
@@ -878,6 +869,7 @@ Sensitivity analyses varied feature selection count (k) and variance threshold (
 \\begin{{itemize}}
     \\item Sample size: GEO GSE39582 (n=585) is moderate. CPTAC-COAD (n=105) has only 7 survival events.
     \\item Binarizing proliferation scores at the median is standard but arbitrary.
+    \\item The median-split proliferation classes barely overlap (Cohen's d = 2.3), making binary separation easier than typical clinical ML tasks.
     \\item Microarray and RNA-seq have different dynamic ranges, requiring post-hoc calibration.
     \\item SHAP scores reflect correlation, not causation.
 \\end{{itemize}}
@@ -903,16 +895,23 @@ Sensitivity analyses varied feature selection count (k) and variance threshold (
     \\item Bharadwaj, R., Qi, W., and Yu, H. Identification of two novel components of the human NDC80 kinetochore complex. \\textit{{Journal of Biological Chemistry}}, 2004. DOI: 10.1074/jbc.M310224200
     \\item Seipold, S. et al. Non-SMC condensin I complex proteins control chromosome segregation and survival of proliferating cells in the zebrafish neural retina. \\textit{{BMC Developmental Biology}}, 2009. DOI: 10.1186/1471-213X-9-40
     \\item Overmeer, R. M. et al. Replication factor C recruits DNA polymerase delta to sites of nucleotide excision repair but is not required for PCNA recruitment. \\textit{{Molecular and Cellular Biology}}, 2010. DOI: 10.1128/MCB.00285-10
+    \\item Guinney, J. et al. The consensus molecular subtypes of colorectal cancer. \\textit{{Nature Medicine}}, 2015. DOI: 10.1038/nm.3967
+    \\item The Cancer Genome Atlas Network. Comprehensive molecular characterization of human colon and rectal cancer. \\textit{{Nature}}, 2012. DOI: 10.1038/nature11252
+    \\item Platt, J. Probabilistic outputs for support vector machines and comparisons to regularized likelihood methods. \\textit{{Advances in Large Margin Classifiers}}, 1999.
+    \\item Yang, W. et al. Genomics of Drug Sensitivity in Cancer (GDSC): a resource for therapeutic biomarker discovery in cancer cells. \\textit{{Nucleic Acids Research}}, 2013. DOI: 10.1093/nar/gks1111
+    \\item Meinshausen, N. and Buhlmann, P. Stability selection. \\textit{{Journal of the Royal Statistical Society: Series B}}, 2010. DOI: 10.1111/j.1467-9868.2010.00740.x
+    \\item Cohen, J. \\textit{{Statistical Power Analysis for the Behavioral Sciences}}. 2nd ed. Lawrence Erlbaum Associates, 1988.
+    \\item Vasaikar, S. et al. Proteogenomic analysis of human colon cancer reveals new therapeutic opportunities. \\textit{{Cell}}, 2019. DOI: 10.1016/j.cell.2019.03.030
 \\end{{enumerate}}
 
 \\section*{{Data and Code Availability}}
-GEO GSE39582 is available at: \\url{{https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE39582}}. TCGA-COAD is available at UCSC Xena: \\url{{https://xenabrowser.net/}}. The repository code, trained pipelines, and reproducibility instructions are available at: \\url{{https://github.com/Ronisnotasianfr/ColoGrowth-ML}}.
+GEO GSE39582 is available at: \\url{{https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE39582}}. TCGA-COAD is available at UCSC Xena: \\url{{https://xenabrowser.net/}}. CPTAC-COAD is available at: \\url{{https://cptac-data-portal.georgetown.edu/}}. The repository code, trained pipelines, and reproducibility instructions are available at: \\url{{https://github.com/Ronisnotasianfr/ColoGrowth-ML}}.
 
 \\section*{{Ethical Considerations and AI Disclosure}}
 Secondary analysis of de-identified public datasets did not require institutional review board (IRB) approval. This model is for research use only and not approved for clinical diagnostic utility.
 
 \\subsection*{{AI Assistance}}
-Claude (Anthropic) was used as a coding assistant during implementation. All scientific decisions, study design, data interpretation, and conclusions are the author's own. Full prompt logs are available in the project repository.
+Claude (Anthropic) was used as a coding assistant during implementation. All study design decisions, data interpretation, statistical analysis, and written conclusions are the author's own. The model architecture, leakage-control strategy, and validation framework were designed by the author. Claude assisted with debugging syntax errors, generating table formats, and optimizing parallel computation settings. Full prompt logs are available in the project repository.
 
 \\end{{document}}
 """

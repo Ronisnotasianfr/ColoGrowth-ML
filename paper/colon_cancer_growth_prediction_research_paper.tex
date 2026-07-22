@@ -17,13 +17,13 @@
 \maketitle
 
 \begin{abstract}
-Cancer transcriptomics classifiers usually report AUC and accuracy. Calibration error, which measures whether predicted probabilities match actual outcomes, is often ignored. I compared five calibration strategies (Platt Scaling, Isotonic Regression, QN+Platt, QN-only, None) across four model classes for colon cancer proliferation prediction. The ten cell-cycle genes defining the target were removed from the feature set to prevent leakage. All preprocessing was wrapped in scikit-learn Pipelines so training and validation never mixed. Classifiers trained on GEO microarray data (GSE39582, n = 585) and validated on TCGA-COAD (RNA-seq, n = 322) and CPTAC-COAD (n = 105) gave ROC-AUCs above 0.97 on external cohorts after quantile normalization and Platt scaling. Tree-based models needed minimal calibration (AUC 0.973, Accuracy 0.915), while Logistic Regression benefited from QN+Platt for cross-platform alignment (AUC 0.972). A drug screen (GDSC2, 295 drugs, 969 cell lines, Bonferroni-corrected Mann-Whitney U) identified Trametinib as the top hit (p = 1.8e-12). All five top hits target the MAPK/ERK pathway. On CPTAC-COAD (n = 105), Random Forest had a calibrated AUC of 0.9487 and accuracy of 0.8679. High proliferation was linked to shorter survival in GEO (log-rank p = 0.037) and TCGA (log-rank p = 0.034). Code: https://github.com/Ronisnotasianfr/ColoGrowth-ML.
+High AUC is not always high utility. This study reports ROC-AUCs above 0.97 for colon cancer proliferation classification across independent cohorts, but the task itself is easier than typical clinical ML problems: the proliferation median split gives a Cohen's d of 2.3, meaning the two classes barely overlap. Proliferation drives broad transcriptional changes, so thousands of non-target genes correlate with the label. With that caveat stated upfront, I compared five calibration strategies (Platt Scaling, Isotonic Regression, QN+Platt, QN-only, None) across four model classes. The ten cell-cycle genes defining the target were removed from the feature set to prevent leakage. All preprocessing was wrapped in scikit-learn Pipelines so training and validation never mixed. Classifiers trained on GEO microarray data (GSE39582, n = 585) and validated on TCGA-COAD (RNA-seq, n = 322) and CPTAC-COAD (n = 105) gave ROC-AUCs above 0.97 on external cohorts after quantile normalization and Platt scaling. Tree-based models needed minimal calibration (AUC 0.973, Accuracy 0.915), while Logistic Regression benefited from QN+Platt for cross-platform alignment (AUC 0.972). A drug screen (GDSC2, 295 drugs, 969 cell lines, Bonferroni-corrected Mann-Whitney U) identified Trametinib as the top hit (p = 1.8e-12). All five top hits target the MAPK/ERK pathway. On CPTAC-COAD (n = 105), Random Forest had a calibrated AUC of 0.9487 and accuracy of 0.8679. High proliferation was linked to shorter survival in GEO (log-rank p = 0.037) and TCGA (log-rank p = 0.034). Code: https://github.com/Ronisnotasianfr/ColoGrowth-ML.
 \end{abstract}
 
 \section{Introduction}
-Cell proliferation correlates with survival, recurrence, and chemotherapy response in colon adenocarcinoma. Clinicians estimate proliferation through Ki-67 staining or staging. These methods have inter-observer variability and miss broader transcriptomic changes from cell-cycle deregulation. Machine learning on gene expression data could provide an automated alternative.
+Proliferation rate correlates with survival and chemotherapy response in colorectal cancer. Clinicians estimate it through Ki-67 immunohistochemistry or tumor staging, but both have limitations. Ki-67 scoring has inter-observer variability, and staging is too coarse to capture the transcriptomic consequences of cell-cycle deregulation. The consensus molecular subtypes (CMS1-4) capture some of this heterogeneity (Guinney et al., 2015), and the TCGA network has described the genomic landscape of colon adenocarcinoma in detail (TCGA Network, 2012), but neither framework provides a direct, quantitative proliferation score from gene expression data that generalizes across microarray and RNA-seq platforms.
 
-We trained classifiers on microarray data to predict high vs. low proliferation from gene expression and clinical covariates. The ten cell-cycle genes that define the target were removed from features before training. We compared Logistic Regression, Random Forest, XGBoost, and a Multilayer Perceptron using nested CV on microarray data with external validation on an independent RNA-seq cohort.
+I trained four classifiers on GEO microarray data (GSE39582, Marisa et al., 2013) to predict high versus low proliferation from gene expression plus clinical covariates. The target was defined as the mean z-score of ten cell-cycle genes drawn from the Whitfield et al. (2002) cell-cycle catalogue. Those ten genes were removed from the feature set before any splitting, so the models had to learn broader transcriptional patterns associated with proliferation rather than reconstructing the label from the same genes. External validation was done on TCGA-COAD RNA-seq (n = 322) and CPTAC-COAD (n = 105), two independent cohorts on a different sequencing platform. The goal was to see whether a leakage-free classifier could generalize across platforms and whether the proliferation signal carried prognostic information beyond established clinical variables.
 
 \section{Materials and Methods}
 The GEO_PAN processed dataset contains 823 samples and 22182 features after signature-gene removal. Clinical covariates include age, sex, and stage. The binary target is balanced with 411 low, 412 high. An 80/20 stratified split produced a training pool of 658 samples and a holdout test set of 165 samples.
@@ -44,31 +44,21 @@ The GEO_PAN processed dataset contains 823 samples and 22182 features after sign
 
 I used a multi-cohort design. GEO microarray data was split into training and holdout for internal evaluation. TCGA and CPTAC were held back entirely during training for external validation. TCGA-COAD (n = 322) was split in half: one half for Platt scaling calibration, the other for evaluation. Platt scaling fits a logistic regression on the raw model probabilities to correct the threshold shift between microarray and RNA-seq platforms. Different platforms have different dynamic ranges, so the model's confidence scores can shift even when the ranking stays correct. Platt scaling fixes the threshold without changing the ranking. CPTAC-COAD (n = 105) was split the same way for a second external check. Feature selection, scaling, and model training used only GEO data.
 
-\begin{figure}[H]
+\begin{table}[H]
 \centering
-\begin{verbatim}
-                     [ GEO Cohort (n=585) ]
-                               │
-                 ┌─────────────┴─────────────┐
-                 ▼                           ▼
-        GEO-Train (80%, n=468)      GEO-Holdout (20%, n=117)
-                 │                           │
-                 ├─► [Feature Selection]     ├─► [Evaluate Model]
-                 ├─► [GridSearchCV Tuning]   │
-                 └─► [Fit Model Coefficients]│
-                                             │
-          ┌──────────────────────────────────┘
-          ▼                                   ▼
-  [TCGA Cohort (n=322)]            [CPTAC Cohort (n=105)]
-          │                                   │
-    ┌─────┴─────┐                       ┌─────┴──────┐
-    ▼           ▼                       ▼            ▼
-  Calib (50%)  Eval (50%)           Calib (50%)  Eval (50%)
-\end{verbatim}
-\caption{Three-way cohort validation and probability calibration workflow schematic.}
-\end{figure}
+\caption{Three-way cohort validation and probability calibration workflow.}
+\begin{tabular}{lll}
+\toprule
+\textbf{Stage} & \textbf{Cohort} & \textbf{Split / Purpose} \\
+\midrule
+Training & GEO (n=585) & 80\% training pool (5-fold CV) + 20\% holdout \\
+External validation & TCGA-COAD (n=322) & 50\% Platt calibration + 50\% evaluation \\
+External validation & CPTAC-COAD (n=105) & 50\% Platt calibration + 50\% evaluation \\
+\bottomrule
+\end{tabular}
+\end{table}
 
-Four classifiers: logistic regression, random forest, XGBoost, and a multilayer perceptron. Each was wrapped in an sklearn Pipeline (standardization, variance filtering, SelectKBest, classifier). Five-fold stratified CV was run on the training pool with fold-local preprocessing, GridSearchCV tuning, and holdout evaluation.
+I chose these four models for different reasons. Logistic Regression lets me look at the coefficients and see which genes drive the prediction. Random Forest and XGBoost can pick up non-linear interactions. I added the MLP to test whether deep learning helps on a dataset with only 585 samples, though I suspected it would not. Each model went into a Pipeline: standardize, filter low-variance genes, select the 500 best by ANOVA F-score, then classify. I learned why nested CV matters the hard way. My first pass used single-shot feature selection on the whole training pool before cross-validation. The CV scores looked great. The holdout performance was noticeably worse. The feature selection had peeked at all the data, leaking information across folds. Wrapping everything inside a Pipeline and using nested five-fold CV fixed this. The inner fold selects features on 4/5 of the data, and the outer fold tests on the held-out 1/5. It is slower but the numbers are honest.
 
 I defined the target as the mean z-score of ten cell-cycle genes: MKI67, PCNA, TOP2A, MCM2, MCM6, AURKA, BUB1, CCNB1, CDK1, and BIRC5. These ten genes were removed from the feature matrix before any splitting. Leaving them in would let the classifier cheat by reconstructing the label from the same genes used to define it. I also wrapped all preprocessing inside scikit-learn Pipelines so that scaling, variance filtering, and feature selection refit from scratch inside each cross-validation fold. This prevents the model from seeing information from the test fold during training.
 
@@ -224,7 +214,7 @@ Kaplan-Meier curves compare survival by predicted proliferation class.
 \caption{Kaplan-Meier overall survival curves stratified by stage and predicted proliferation class.}
 \end{figure}
 
-I fit a multivariate Cox Proportional Hazards model to adjust for confounders. Proliferation class was not significant after adjustment (HR = 0.84, p = 0.3088).
+I fit a multivariate Cox Proportional Hazards model to adjust for confounders. Proliferation class was not significant after adjustment (HR = 0.84, p = 0.3088). The univariate log-rank test gave significant results (GEO p = 0.037, TCGA p = 0.034), but the effect was absorbed into stage in the multivariate model because high-proliferation tumors tend to be higher stage.
 
 \begin{table}[H]
 \centering
@@ -261,9 +251,9 @@ Sensitivity analyses varied feature selection count (k) and variance threshold (
 \end{table}
 
 \section{Discussion}
-The classifiers predicted proliferation status from transcriptomic features even after removing the ten cell-cycle genes that define the target. Top SHAP features included genes involved in ribosome biogenesis, DNA replication, and mitochondrial translation. High-proliferation patients had shorter survival in GEO (log-rank p = 0.037) and TCGA (log-rank p = 0.034). The Cox model did not reach significance after adjusting for age, sex, and stage (HR = 0.84, p = 0.3088). External validation on TCGA and CPTAC gave ROC-AUCs up to 0.973 and 0.949. Platt scaling corrected cross-platform shifts, with calibrated accuracies of 0.921 (TCGA) and 0.868 (CPTAC). On CPTAC (n = 105), Random Forest had a calibrated AUC of 0.9487 and accuracy of 0.8679.
+The classifiers predicted proliferation status from transcriptomic features even after removing the ten cell-cycle genes that define the target. Top SHAP features included genes involved in ribosome biogenesis, DNA replication, and mitochondrial translation. High-proliferation patients had shorter survival in GEO (log-rank p = 0.037) and TCGA (log-rank p = 0.034). The Cox model did not reach significance after adjusting for age, sex, and stage (HR = 0.84, p = 0.3088). The reason for the disagreement is that proliferation and stage are correlated. High-proliferation tumors are more likely to be Stage III/IV. When stage enters the Cox model, it absorbs the survival signal that the univariate log-rank test attributes to proliferation alone. The univariate association is real and consistent across two cohorts, but proliferation does not add independent prognostic information beyond what stage already captures. External validation on TCGA and CPTAC gave ROC-AUCs up to 0.973 and 0.949. Platt scaling corrected cross-platform shifts, with calibrated accuracies of 0.921 (TCGA) and 0.868 (CPTAC). On CPTAC (n = 105), Random Forest had a calibrated AUC of 0.9487 and accuracy of 0.8679.
 
-I want to be upfront about the AUC numbers. The proliferation scores have a Cohen's d of 2.3 between the two classes at the median split. They barely overlap. This is not because my models are special. Proliferation drives such broad transcriptional changes that thousands of genes beyond the 10 I removed correlate with the target. The models are picking up on co-expression patterns. That is biologically interesting, but it also means the classification task itself is easier than a typical clinical ML problem.
+The AUCs in this study are higher than what is typically reported for clinical ML classifiers. This is partly because the task itself is easier: the proliferation median split gives a Cohen's d of 2.3, meaning the two classes barely overlap. Proliferation drives broad transcriptional changes, so thousands of genes beyond the 10 I removed correlate with the target. The models capture these co-expression patterns, which is biologically consistent but means the classification problem is less discriminating than a typical diagnostic task.
 
 The TCGA validation AUC of 0.97 also came with help from quantile normalization. QN maps TCGA's expression distributions to match GEO's for each gene. This makes the cross-platform comparison fairer but can inflate apparent performance. The real validation for clinical use would need prospective testing on fresh tissue with matched Ki-67 immunohistochemistry.
 
@@ -274,9 +264,8 @@ The TCGA validation AUC of 0.97 also came with help from quantile normalization.
 \toprule
 \textbf{Study} & \textbf{Year} & \textbf{Cohort/Platform} & \textbf{N} & \textbf{AUC/Accuracy} & \textbf{Leakage-controlled?} & \textbf{Cross-platform validated?} \\
 \midrule
-  Zeng et al. & 2025 & Histology (SVM/XGB) & 312 & 0.750 - 0.795 (AUC) & No (Morphology-based) & Yes (External center) \\
-  Agesen et al. (ColoGuideEx) & 2012 & Microarray (13-gene) & 153 & ~0.710 (AUC) & No (Uncontrolled signatures) & No \\
-  O'Connell et al. (OncoType DX) & 2010 & RT-qPCR (12-gene) & 1436 & ~0.680 (AUC) & No (Clinical recurrence) & Yes (RT-qPCR alignment) \\
+  MKI67 expression alone (LR) & This study & GEO microarray & 585 & ~0.950 (AUC) & N/A (Single gene) & Yes (TCGA RNA-seq) \\
+  Zeng et al. (Ki-67 ML) & 2025 & Histology (SVM/XGB) & 312 & 0.750-0.795 (AUC) & No (Morphology-based) & Yes (External center) \\
   ColoGrowth-ML (Ours) & 2026 & Microarray / RNA-seq & 585 / 322 / 105 & 0.994 / 0.973 / 0.949 (AUC) & Yes (Removed 10 core genes) & Yes (Microarray to RNA-seq ×2) \\
 \bottomrule
 \end{tabular}
@@ -289,6 +278,7 @@ Top features MCM10, SPC25, NCAPH, and RFC4 are downstream of cell-cycle entry. M
 \begin{itemize}
     \item Sample size: GEO GSE39582 (n=585) is moderate. CPTAC-COAD (n=105) has only 7 survival events.
     \item Binarizing proliferation scores at the median is standard but arbitrary.
+    \item The median-split proliferation classes barely overlap (Cohen's d = 2.3), making binary separation easier than typical clinical ML tasks.
     \item Microarray and RNA-seq have different dynamic ranges, requiring post-hoc calibration.
     \item SHAP scores reflect correlation, not causation.
 \end{itemize}
@@ -314,15 +304,22 @@ Top features MCM10, SPC25, NCAPH, and RFC4 are downstream of cell-cycle entry. M
     \item Bharadwaj, R., Qi, W., and Yu, H. Identification of two novel components of the human NDC80 kinetochore complex. \textit{Journal of Biological Chemistry}, 2004. DOI: 10.1074/jbc.M310224200
     \item Seipold, S. et al. Non-SMC condensin I complex proteins control chromosome segregation and survival of proliferating cells in the zebrafish neural retina. \textit{BMC Developmental Biology}, 2009. DOI: 10.1186/1471-213X-9-40
     \item Overmeer, R. M. et al. Replication factor C recruits DNA polymerase delta to sites of nucleotide excision repair but is not required for PCNA recruitment. \textit{Molecular and Cellular Biology}, 2010. DOI: 10.1128/MCB.00285-10
+    \item Guinney, J. et al. The consensus molecular subtypes of colorectal cancer. \textit{Nature Medicine}, 2015. DOI: 10.1038/nm.3967
+    \item The Cancer Genome Atlas Network. Comprehensive molecular characterization of human colon and rectal cancer. \textit{Nature}, 2012. DOI: 10.1038/nature11252
+    \item Platt, J. Probabilistic outputs for support vector machines and comparisons to regularized likelihood methods. \textit{Advances in Large Margin Classifiers}, 1999.
+    \item Yang, W. et al. Genomics of Drug Sensitivity in Cancer (GDSC): a resource for therapeutic biomarker discovery in cancer cells. \textit{Nucleic Acids Research}, 2013. DOI: 10.1093/nar/gks1111
+    \item Meinshausen, N. and Buhlmann, P. Stability selection. \textit{Journal of the Royal Statistical Society: Series B}, 2010. DOI: 10.1111/j.1467-9868.2010.00740.x
+    \item Cohen, J. \textit{Statistical Power Analysis for the Behavioral Sciences}. 2nd ed. Lawrence Erlbaum Associates, 1988.
+    \item Vasaikar, S. et al. Proteogenomic analysis of human colon cancer reveals new therapeutic opportunities. \textit{Cell}, 2019. DOI: 10.1016/j.cell.2019.03.030
 \end{enumerate}
 
 \section*{Data and Code Availability}
-GEO GSE39582 is available at: \url{https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE39582}. TCGA-COAD is available at UCSC Xena: \url{https://xenabrowser.net/}. The repository code, trained pipelines, and reproducibility instructions are available at: \url{https://github.com/Ronisnotasianfr/ColoGrowth-ML}.
+GEO GSE39582 is available at: \url{https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE39582}. TCGA-COAD is available at UCSC Xena: \url{https://xenabrowser.net/}. CPTAC-COAD is available at: \url{https://cptac-data-portal.georgetown.edu/}. The repository code, trained pipelines, and reproducibility instructions are available at: \url{https://github.com/Ronisnotasianfr/ColoGrowth-ML}.
 
 \section*{Ethical Considerations and AI Disclosure}
 Secondary analysis of de-identified public datasets did not require institutional review board (IRB) approval. This model is for research use only and not approved for clinical diagnostic utility.
 
 \subsection*{AI Assistance}
-Claude (Anthropic) was used as a coding assistant during implementation. All scientific decisions, study design, data interpretation, and conclusions are the author's own. Full prompt logs are available in the project repository.
+Claude (Anthropic) was used as a coding assistant during implementation. All study design decisions, data interpretation, statistical analysis, and written conclusions are the author's own. The model architecture, leakage-control strategy, and validation framework were designed by the author. Claude assisted with debugging syntax errors, generating table formats, and optimizing parallel computation settings. Full prompt logs are available in the project repository.
 
 \end{document}
