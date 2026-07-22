@@ -17,7 +17,7 @@
 \maketitle
 
 \begin{abstract}
-Cancer transcriptomics classifiers usually report AUC and accuracy. Calibration error, which measures whether predicted probabilities match actual outcomes, is often ignored. We compared five calibration strategies (Platt Scaling, Isotonic Regression, QN+Platt, QN-only, None) across four model classes for colon cancer proliferation prediction. The ten cell-cycle genes defining the target were removed from the feature set to prevent leakage. All preprocessing was wrapped in scikit-learn Pipelines so training and validation never mixed. Classifiers trained on GEO microarray data (GSE39582, n = 585) and validated on TCGA-COAD (RNA-seq, n = 322) and CPTAC-COAD (n = 105) gave ROC-AUCs above 0.97 on external cohorts after quantile normalization and Platt scaling. Tree-based models needed minimal calibration (AUC 0.973, Accuracy 0.915), while Logistic Regression benefited from QN+Platt for cross-platform alignment (AUC 0.972). A drug screen (GDSC2, 295 drugs, 969 cell lines, Bonferroni-corrected Mann-Whitney U) identified Trametinib as the top hit (p = 1.8e-12). All five top hits target the MAPK/ERK pathway. On CPTAC-COAD (n = 105), Random Forest had a calibrated AUC of 0.9487 and accuracy of 0.8679. High proliferation was linked to shorter survival in GEO (log-rank p = 0.037) and TCGA (log-rank p = 0.034). Code: https://github.com/Ronisnotasianfr/ColoGrowth-ML.
+Cancer transcriptomics classifiers usually report AUC and accuracy. Calibration error, which measures whether predicted probabilities match actual outcomes, is often ignored. I compared five calibration strategies (Platt Scaling, Isotonic Regression, QN+Platt, QN-only, None) across four model classes for colon cancer proliferation prediction. The ten cell-cycle genes defining the target were removed from the feature set to prevent leakage. All preprocessing was wrapped in scikit-learn Pipelines so training and validation never mixed. Classifiers trained on GEO microarray data (GSE39582, n = 585) and validated on TCGA-COAD (RNA-seq, n = 322) and CPTAC-COAD (n = 105) gave ROC-AUCs above 0.97 on external cohorts after quantile normalization and Platt scaling. Tree-based models needed minimal calibration (AUC 0.973, Accuracy 0.915), while Logistic Regression benefited from QN+Platt for cross-platform alignment (AUC 0.972). A drug screen (GDSC2, 295 drugs, 969 cell lines, Bonferroni-corrected Mann-Whitney U) identified Trametinib as the top hit (p = 1.8e-12). All five top hits target the MAPK/ERK pathway. On CPTAC-COAD (n = 105), Random Forest had a calibrated AUC of 0.9487 and accuracy of 0.8679. High proliferation was linked to shorter survival in GEO (log-rank p = 0.037) and TCGA (log-rank p = 0.034). Code: https://github.com/Ronisnotasianfr/ColoGrowth-ML.
 \end{abstract}
 
 \section{Introduction}
@@ -42,7 +42,7 @@ The GEO_PAN processed dataset contains 823 samples and 22182 features after sign
 \end{tabular}
 \end{table}
 
-We used a multi-cohort design: GEO-train/GEO-holdout, then TCGA and CPTAC for external validation. TCGA-COAD (n = 322) was split into calibration and evaluation halves (161 each). The calibration set was used to fit Platt scaling. CPTAC-COAD (n = 105) was split similarly (52 calibration, 53 evaluation) for a second external evaluation. Feature selection, scaling, and model training used only GEO data. No TCGA or CPTAC samples were used in training.
+I used a multi-cohort design. GEO microarray data was split into training and holdout for internal evaluation. TCGA and CPTAC were held back entirely during training for external validation. TCGA-COAD (n = 322) was split in half: one half for Platt scaling calibration, the other for evaluation. Platt scaling fits a logistic regression on the raw model probabilities to correct the threshold shift between microarray and RNA-seq platforms. Different platforms have different dynamic ranges, so the model's confidence scores can shift even when the ranking stays correct. Platt scaling fixes the threshold without changing the ranking. CPTAC-COAD (n = 105) was split the same way for a second external check. Feature selection, scaling, and model training used only GEO data.
 
 \begin{figure}[H]
 \centering
@@ -70,7 +70,7 @@ We used a multi-cohort design: GEO-train/GEO-holdout, then TCGA and CPTAC for ex
 
 Four classifiers: logistic regression, random forest, XGBoost, and a multilayer perceptron. Each was wrapped in an sklearn Pipeline (standardization, variance filtering, SelectKBest, classifier). Five-fold stratified CV was run on the training pool with fold-local preprocessing, GridSearchCV tuning, and holdout evaluation.
 
-The target was defined as the mean z-score of ten cell-cycle genes: MKI67, PCNA, TOP2A, MCM2, MCM6, AURKA, BUB1, CCNB1, CDK1, and BIRC5. These ten genes were removed from the feature matrix before splitting the data. Leaving them in would let the classifier reconstruct the label from the same genes used to define it. All preprocessing steps (scaling, variance filtering, feature selection) were wrapped inside scikit-learn Pipelines so they fit only on the active training fold and are applied fresh to validation and test folds.
+I defined the target as the mean z-score of ten cell-cycle genes: MKI67, PCNA, TOP2A, MCM2, MCM6, AURKA, BUB1, CCNB1, CDK1, and BIRC5. These ten genes were removed from the feature matrix before any splitting. Leaving them in would let the classifier cheat by reconstructing the label from the same genes used to define it. I also wrapped all preprocessing inside scikit-learn Pipelines so that scaling, variance filtering, and feature selection refit from scratch inside each cross-validation fold. This prevents the model from seeing information from the test fold during training.
 
 \begin{table}[H]
 \centering
@@ -93,7 +93,7 @@ The target was defined as the mean z-score of ten cell-cycle genes: MKI67, PCNA,
 \end{table}
 
 \section{Results}
-Four models were tested with nested five-fold CV on the GEO training pool (n = 468) after removing the ten signature genes. Mean CV ROC-AUCs were similar across models: Logistic Regression 0.9811 (+/- 0.0041), Random Forest 0.9788 (+/- 0.0047), XGBoost 0.9783 (+/- 0.0060), and MLP 0.9781 (+/- 0.0048). A simple Logistic Regression without feature selection gave a holdout accuracy of 0.9697, compared to 0.4970 for a majority-class baseline.
+I tested four models with nested five-fold CV on the GEO training pool (n = 468) after removing the ten signature genes. Mean CV ROC-AUCs were similar across models: Logistic Regression 0.9811 (+/- 0.0041), Random Forest 0.9788 (+/- 0.0047), XGBoost 0.9783 (+/- 0.0060), and MLP 0.9781 (+/- 0.0048). A simple Logistic Regression without feature selection gave a holdout accuracy of 0.9697, compared to 0.4970 for a majority-class baseline.
 
 \begin{table}[H]
 \centering
@@ -102,8 +102,8 @@ Four models were tested with nested five-fold CV on the GEO training pool (n = 4
 \toprule
 \textbf{Model} & \textbf{CV ROC-AUC} & \textbf{Holdout Accuracy (95\% CI)} & \textbf{Holdout ROC-AUC (95\% CI)} \\
 \midrule
-  Logistic Regression & 0.9811 (+/- 0.0041) & 0.9091 (95% CI: 0.8606-0.9515) & 0.9834 (95% CI: 0.9685-0.9943) \\
-  Random Forest & 0.9788 (+/- 0.0047) & 0.9394 (95% CI: 0.9030-0.9758) & 0.9881 (95% CI: 0.9763-0.9966) \\
+  Logistic Regression & 0.9811 (+/- 0.0041) & 0.9030 (95% CI: 0.8545-0.9455) & 0.9850 (95% CI: 0.9713-0.9953) \\
+  Random Forest & 0.9788 (+/- 0.0047) & 0.9273 (95% CI: 0.8848-0.9636) & 0.9871 (95% CI: 0.9748-0.9959) \\
   XGBoost & 0.9783 (+/- 0.0060) & 0.9273 (95% CI: 0.8848-0.9697) & 0.9910 (95% CI: 0.9813-0.9978) \\
   Neural Network (MLP) & 0.9781 (+/- 0.0048) & 0.8970 (95% CI: 0.8485-0.9455) & 0.9812 (95% CI: 0.9647-0.9937) \\
 \bottomrule
@@ -116,7 +116,7 @@ Four models were tested with nested five-fold CV on the GEO training pool (n = 4
 \caption{Calibration curves showing observed positive fraction vs. predicted risk probabilities for the four classifiers on holdout test set.}
 \end{figure}
 
-On the holdout set (n = 117), XGBoost had an ROC-AUC of 0.9910 (95% CI: 0.9813-0.9978) and accuracy of 0.9273. On holdout: Logistic Regression (Brier=0.0523, ECE=0.0548), Random Forest (Brier=0.0530, ECE=0.0653), XGBoost (Brier=0.0461, ECE=0.0481), Neural Network (MLP) (Brier=0.0566, ECE=0.0625). Bootstrap comparisons showed differences for Logistic Regression vs XGBoost (p=0.0351); XGBoost vs Neural Network (MLP) (p=0.0369). External validation on TCGA (n = 322) gave a Random Forest calibrated AUC of 0.973 and accuracy of 0.921, with XGBoost close behind at 0.968 and 0.903. On CPTAC-COAD (n = 105, a separate cohort), Random Forest gave a calibrated AUC of 0.9487 and accuracy of 0.8679. Full results: Logistic Regression (AUC=0.8832, Acc=0.7925); Random Forest (AUC=0.9487, Acc=0.8679); XGBoost (AUC=0.9231, Acc=0.8302); Neural Network (MLP) (AUC=0.9402, Acc=0.8302).
+On the holdout set (n = 117), XGBoost had an ROC-AUC of 0.9910 (95% CI: 0.9813-0.9978) and accuracy of 0.9273. On holdout: Logistic Regression (Brier=0.0513, ECE=0.0722), Random Forest (Brier=0.0517, ECE=0.0492), XGBoost (Brier=0.0461, ECE=0.0481), Neural Network (MLP) (Brier=0.0566, ECE=0.0625). Bootstrap comparisons showed differences for XGBoost vs Neural Network (MLP) (p=0.0369). External validation on TCGA (n = 322) gave a Random Forest calibrated AUC of 0.973 and accuracy of 0.921, with XGBoost close behind at 0.968 and 0.903. On CPTAC-COAD (n = 105, a separate cohort), Random Forest gave a calibrated AUC of 0.9487 and accuracy of 0.8679. Full results: Logistic Regression (AUC=0.8832, Acc=0.7925); Random Forest (AUC=0.9487, Acc=0.8679); XGBoost (AUC=0.9231, Acc=0.8302); Neural Network (MLP) (AUC=0.9402, Acc=0.8302).
 
 \section{Interpretation and Biological Readout}
 SHAP summaries were generated from pipeline-transformed, leakage-free features. Because the ten signature genes used to define the proliferation label were removed before training, top-ranked features should be interpreted as candidate biological or clinical correlates rather than label-construction artifacts.
@@ -177,9 +177,9 @@ SHAP summaries were generated from pipeline-transformed, leakage-free features. 
 \toprule
 \textbf{Model} & \textbf{Threshold} & \textbf{Sensitivity} & \textbf{Specificity} & \textbf{PPV} & \textbf{NPV} & \textbf{NNT} \\
 \midrule
-  Logistic Regression & 0.50 & 0.8916 & 0.9268 & 0.9250 & 0.8941 & 2.4 \\
-  Logistic Regression & 0.60 & 0.8675 & 0.9756 & 0.9730 & 0.8791 & 2.4 \\
-  Random Forest & 0.50 & 0.9759 & 0.9024 & 0.9101 & 0.9737 & 2.3 \\
+  Logistic Regression & 0.50 & 0.8795 & 0.9268 & 0.9241 & 0.8837 & 2.5 \\
+  Logistic Regression & 0.60 & 0.8675 & 0.9634 & 0.9600 & 0.8778 & 2.4 \\
+  Random Forest & 0.50 & 0.9518 & 0.9024 & 0.9080 & 0.9487 & 2.3 \\
   Random Forest & 0.60 & 0.8916 & 0.9512 & 0.9487 & 0.8966 & 2.4 \\
   XGBoost & 0.50 & 0.9398 & 0.9146 & 0.9176 & 0.9375 & 2.3 \\
   XGBoost & 0.60 & 0.9277 & 0.9268 & 0.9277 & 0.9268 & 2.4 \\
@@ -199,13 +199,13 @@ Subgroup analyses checked for performance differences across age, sex, and stage
 \toprule
 \textbf{Subgroup} & \textbf{N} & \textbf{Accuracy} & \textbf{ROC-AUC} & \textbf{ROC-AUC 95\% CI} & \textbf{Interaction p-val} & \textbf{Interaction 95\% CI} \\
 \midrule
-  All & 165 & 0.9091 & 0.9834 & (0.9688-0.9942) & - & - \\
-  Age < 65 & 39 & 0.8205 & 0.9484 & (0.8734-1.0000) & 0.2100 & (-0.1277 to 0.0101) \\
-  Age >= 65 & 126 & 0.9365 & 0.9901 & (0.9783-0.9980) & 0.2100 & (-0.1277 to 0.0101) \\
-  Male & 62 & 0.9032 & 0.9739 & (0.9363-0.9970) & 0.5070 & (-0.0511 to 0.0198) \\
-  Female & 103 & 0.9126 & 0.9857 & (0.9635-0.9963) & 0.5070 & (-0.0511 to 0.0198) \\
-  Stage I/II & 57 & 0.9123 & 0.9801 & (0.9404-1.0000) & 0.3410 & (-0.0290 to 0.0826) \\
-  Stage III/IV & 57 & 0.8596 & 0.9559 & (0.8814-0.9882) & 0.3410 & (-0.0290 to 0.0826) \\
+  All & 165 & 0.9030 & 0.9850 & (0.9711-0.9948) & - & - \\
+  Age < 65 & 39 & 0.8205 & 0.9511 & (0.8757-1.0000) & 0.2050 & (-0.1205 to 0.0096) \\
+  Age >= 65 & 126 & 0.9286 & 0.9911 & (0.9805-0.9985) & 0.2050 & (-0.1205 to 0.0096) \\
+  Male & 62 & 0.8871 & 0.9778 & (0.9390-1.0000) & 0.5980 & (-0.0446 to 0.0198) \\
+  Female & 103 & 0.9126 & 0.9865 & (0.9676-0.9972) & 0.5980 & (-0.0446 to 0.0198) \\
+  Stage I/II & 57 & 0.8947 & 0.9858 & (0.9540-1.0000) & 0.2690 & (-0.0203 to 0.0798) \\
+  Stage III/IV & 57 & 0.8596 & 0.9603 & (0.8888-0.9917) & 0.2690 & (-0.0203 to 0.0798) \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -224,7 +224,7 @@ Kaplan-Meier curves compare survival by predicted proliferation class.
 \caption{Kaplan-Meier overall survival curves stratified by stage and predicted proliferation class.}
 \end{figure}
 
-We fit a multivariate Cox Proportional Hazards model to adjust for confounders. Proliferation class was not significant after adjustment (HR = 1.09, p = 0.5341).
+I fit a multivariate Cox Proportional Hazards model to adjust for confounders. Proliferation class was not significant after adjustment (HR = 0.84, p = 0.3088).
 
 \begin{table}[H]
 \centering
@@ -233,10 +233,10 @@ We fit a multivariate Cox Proportional Hazards model to adjust for confounders. 
 \toprule
 \textbf{Predictor / Covariate} & \textbf{Coefficient} & \textbf{Hazard Ratio (HR)} & \textbf{95\% CI} & \textbf{p-value} \\
 \midrule
-  High\_Proliferation & 0.0861 & 1.0899 & (0.83 - 1.43) & 5.3408e-01 \\
-  Age & 0.0243 & 1.0246 & (1.01 - 1.04) & 2.2280e-05 \\
-  Is\_Male & 0.0372 & 1.0379 & (0.80 - 1.34) & 7.7829e-01 \\
-  Stage & 0.0635 & 1.0655 & (0.95 - 1.20) & 2.9381e-01 \\
+  High\_Proliferation & -0.1702 & 0.8435 & (0.61 - 1.17) & 3.0875e-01 \\
+  Age & 0.0300 & 1.0305 & (1.02 - 1.04) & 1.2432e-06 \\
+  Is\_Male & 0.3540 & 1.4248 & (1.06 - 1.91) & 1.7165e-02 \\
+  Stage & 0.7247 & 2.0641 & (1.68 - 2.53) & 3.3683e-12 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -261,7 +261,11 @@ Sensitivity analyses varied feature selection count (k) and variance threshold (
 \end{table}
 
 \section{Discussion}
-The classifiers could predict proliferation status from transcriptomic features even after removing the ten cell-cycle genes that define the target. Top SHAP features included genes involved in ribosome biogenesis, DNA replication, and mitochondrial translation. High-proliferation patients had shorter survival in GEO (log-rank p = 0.037) and TCGA (log-rank p = 0.034). The Cox model did not reach significance after adjusting for age, sex, and stage (HR = 1.09, p = 0.5341). External validation on TCGA and CPTAC gave ROC-AUCs up to 0.973 and 0.949. Platt scaling corrected cross-platform shifts, with calibrated accuracies of 0.921 (TCGA) and 0.868 (CPTAC). On CPTAC (n = 105), Random Forest had a calibrated AUC of 0.9487 and accuracy of 0.8679.
+The classifiers predicted proliferation status from transcriptomic features even after removing the ten cell-cycle genes that define the target. Top SHAP features included genes involved in ribosome biogenesis, DNA replication, and mitochondrial translation. High-proliferation patients had shorter survival in GEO (log-rank p = 0.037) and TCGA (log-rank p = 0.034). The Cox model did not reach significance after adjusting for age, sex, and stage (HR = 0.84, p = 0.3088). External validation on TCGA and CPTAC gave ROC-AUCs up to 0.973 and 0.949. Platt scaling corrected cross-platform shifts, with calibrated accuracies of 0.921 (TCGA) and 0.868 (CPTAC). On CPTAC (n = 105), Random Forest had a calibrated AUC of 0.9487 and accuracy of 0.8679.
+
+I want to be upfront about the AUC numbers. The proliferation scores have a Cohen's d of 2.3 between the two classes at the median split. They barely overlap. This is not because my models are special. Proliferation drives such broad transcriptional changes that thousands of genes beyond the 10 I removed correlate with the target. The models are picking up on co-expression patterns. That is biologically interesting, but it also means the classification task itself is easier than a typical clinical ML problem.
+
+The TCGA validation AUC of 0.97 also came with help from quantile normalization. QN maps TCGA's expression distributions to match GEO's for each gene. This makes the cross-platform comparison fairer but can inflate apparent performance. The real validation for clinical use would need prospective testing on fresh tissue with matched Ki-67 immunohistochemistry.
 
 \begin{table}[H]
 \centering

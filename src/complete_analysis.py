@@ -172,7 +172,7 @@ def analyze_feature_selection_stability(X_train, y_train):
     # Fold local preprocessing
     for fold, (train_idx, val_idx) in enumerate(cv.split(X_train_genes, y_train)):
         X_fold_tr = X_train_genes.iloc[train_idx]
-        y_fold_tr = y_train.iloc[train_idx]
+        y_fold_tr = y_train[train_idx] if isinstance(y_train, np.ndarray) else y_train.iloc[train_idx]
         
         # Scaling
         scaler = StandardScaler()
@@ -750,10 +750,18 @@ def run_cox_proportional_hazards(dataset="geo_pan"):
     sex = X['clinical_is_male']
     stage = X['clinical_stage']
     
+    # Handle duplicate columns from merged cohorts
+    os_time = clinical['os_time']
+    if isinstance(os_time, pd.DataFrame):
+        os_time = os_time.iloc[:, 0]
+    os_event = clinical['os_event']
+    if isinstance(os_event, pd.DataFrame):
+        os_event = os_event.iloc[:, 0]
+    
     # Combine into a single DataFrame for lifelines
     df_cox = pd.DataFrame({
-        'os_time': pd.to_numeric(clinical['os_time'], errors='coerce'),
-        'os_event': pd.to_numeric(clinical['os_event'], errors='coerce'),
+        'os_time': pd.to_numeric(os_time, errors='coerce'),
+        'os_event': pd.to_numeric(os_event, errors='coerce'),
         'High_Proliferation': y,
         'Age': age,
         'Is_Male': sex,
@@ -828,8 +836,8 @@ def main():
         train_threshold = scores_train.median()
         print(f"\nBinarization threshold computed from TRAINING data only: {train_threshold:.4f}")
         print(f"  (Original all-data median was ~{scores.median():.4f})")
-        y_train = (scores_train >= train_threshold).astype(int).values
-        y_test = (scores_test >= train_threshold).astype(int).values
+        y_train = (scores_train >= train_threshold).astype(int)
+        y_test = (scores_test >= train_threshold).astype(int)
         print(f"  Re-binarized: train={np.mean(y_train):.1%} high prolif, test={np.mean(y_test):.1%} high prolif")
     
     # 1. Run baselines

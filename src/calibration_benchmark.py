@@ -282,7 +282,7 @@ def main():
     for name in MODEL_NAMES:
         subset = df[df['Model'] == name]
         best = subset.loc[subset['AUC'].idxmax()]
-        print(f'  {name:<22} → {best["Calibration"]:<16} AUC={best["AUC"]:.4f} '
+        print(f'  {name:<22} -> {best["Calibration"]:<16} AUC={best["AUC"]:.4f} '
               f'ECE={best["ECE"]:.4f} [{best["ECE_95CI_Lower"]:.4f}-{best["ECE_95CI_Upper"]:.4f}]')
     print(f'\nResults saved to {csv_path}')
 

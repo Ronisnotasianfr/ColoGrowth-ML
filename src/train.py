@@ -81,7 +81,7 @@ MODEL_BUILDERS = {
 OUTER_CV_SPLITS = 5
 INNER_CV_SPLITS = 3
 FEATURE_SELECT_K = 500
-STABILITY_BOOTSTRAP = 100
+STABILITY_BOOTSTRAP = 30
 STABILITY_MIN_PCT = 0.5
 
 
@@ -108,7 +108,7 @@ def create_pipeline(model_builder):
             k=FEATURE_SELECT_K,
             n_bootstrap=STABILITY_BOOTSTRAP,
             min_pct=STABILITY_MIN_PCT,
-            n_jobs=-1,
+            n_jobs=2,
         )),
         ('classifier', model_builder()),
     ])
@@ -162,7 +162,7 @@ def run_unbiased_cross_validation(pipeline, X_train, y_train, n_splits=OUTER_CV_
         cv=outer_cv,
         scoring=['accuracy', 'roc_auc'],
         return_train_score=False,
-        n_jobs=-1,
+        n_jobs=2,
     )
 
     return {
@@ -187,7 +187,7 @@ def tune_hyperparameters(model_name, pipeline, X_train, y_train):
         param_grid=param_grid,
         cv=inner_cv,
         scoring='roc_auc',
-        n_jobs=-1,
+        n_jobs=2,
         verbose=0,
     )
     grid_search.fit(X_train, y_train)

@@ -140,7 +140,7 @@ def build_abstract(metrics: pd.DataFrame, stats: dict) -> str:
     return (
         f"Cancer transcriptomics classifiers usually report AUC and accuracy. "
         f"Calibration error, which measures whether predicted probabilities match actual "
-        f"outcomes, is often ignored. We compared five calibration strategies "
+        f"outcomes, is often ignored. I compared five calibration strategies "
         f"(Platt Scaling, Isotonic Regression, QN+Platt, QN-only, None) "
         f"across four model classes for colon cancer proliferation prediction. The ten cell-cycle genes "
         f"defining the target were removed from the feature set to prevent leakage. "
@@ -161,12 +161,13 @@ def build_abstract(metrics: pd.DataFrame, stats: dict) -> str:
 
 def build_methods_leakage_paragraph() -> str:
     return (
-        "The target was defined as the mean z-score of ten cell-cycle genes: MKI67, PCNA, TOP2A, MCM2, "
-        "MCM6, AURKA, BUB1, CCNB1, CDK1, and BIRC5. These ten genes were removed from the feature matrix "
-        "before splitting the data. Leaving them in would let the classifier reconstruct the label from "
-        "the same genes used to define it. All preprocessing steps (scaling, variance filtering, "
-        "feature selection) were wrapped inside scikit-learn Pipelines so they fit only on the active "
-        "training fold and are applied fresh to validation and test folds."
+        "I defined the target as the mean z-score of ten cell-cycle genes: MKI67, PCNA, TOP2A, MCM2, "
+        "MCM6, AURKA, BUB1, CCNB1, CDK1, and BIRC5. These ten genes were removed from the feature "
+        "matrix before any splitting. Leaving them in would let the classifier cheat by reconstructing "
+        "the label from the same genes used to define it. "
+        "I also wrapped all preprocessing inside scikit-learn Pipelines so that scaling, variance "
+        "filtering, and feature selection refit from scratch inside each cross-validation fold. "
+        "This prevents the model from seeing information from the test fold during training."
     )
 
 
@@ -202,7 +203,7 @@ def build_results_opening(metrics: pd.DataFrame) -> str:
         simple_acc = base_df.iloc[0]['simple_lr_accuracy']
 
     return (
-        f"Four models were tested with nested five-fold CV on the GEO training pool (n = 468) "
+        f"I tested four models with nested five-fold CV on the GEO training pool (n = 468) "
         f"after removing the ten signature genes. Mean CV ROC-AUCs were similar across models: "
         f"Logistic Regression {lr['CV_ROC_AUC_Mean']:.4f} (+/- {lr['CV_ROC_AUC_Std']:.4f}), "
         f"Random Forest {rf['CV_ROC_AUC_Mean']:.4f} (+/- {rf['CV_ROC_AUC_Std']:.4f}), "
@@ -302,11 +303,23 @@ def build_discussion_paragraph() -> str:
         )
 
     return (
-        f"The classifiers could predict proliferation status from transcriptomic features even after "
+        f"The classifiers predicted proliferation status from transcriptomic features even after "
         f"removing the ten cell-cycle genes that define the target. Top SHAP features included genes "
         f"involved in ribosome biogenesis, DNA replication, and mitochondrial translation. {cox_info} "
         f"External validation on TCGA and CPTAC gave ROC-AUCs up to 0.973 and 0.949. Platt scaling "
         f"corrected cross-platform shifts, with calibrated accuracies of 0.921 (TCGA) and 0.868 (CPTAC).{cptac_disc}"
+        f"\n\n"
+        f"I want to be upfront about the AUC numbers. The proliferation scores have a Cohen's d "
+        f"of 2.3 between the two classes at the median split. They barely overlap. This is not "
+        f"because my models are special. Proliferation drives such broad transcriptional changes "
+        f"that thousands of genes beyond the 10 I removed correlate with the target. The models "
+        f"are picking up on co-expression patterns. That is biologically interesting, but it also "
+        f"means the classification task itself is easier than a typical clinical ML problem."
+        f"\n\n"
+        f"The TCGA validation AUC of 0.97 also came with help from quantile normalization. QN maps "
+        f"TCGA's expression distributions to match GEO's for each gene. This makes the cross-platform "
+        f"comparison fairer but can inflate apparent performance. The real validation for clinical "
+        f"use would need prospective testing on fresh tissue with matched Ki-67 immunohistochemistry."
     )
 
 
@@ -497,12 +510,17 @@ def build_benchmarking_table() -> list[tuple]:
 
 def build_methods_split_justification() -> str:
     return (
-        "We used a multi-cohort design: GEO-train/GEO-holdout, then TCGA and CPTAC for external "
-        "validation. TCGA-COAD (n = 322) was split into calibration and evaluation halves (161 each). "
-        "The calibration set was used to fit Platt scaling. CPTAC-COAD (n = 105) was split similarly "
-        "(52 calibration, 53 evaluation) for a second external evaluation. "
-        "Feature selection, scaling, and model training used only GEO data. "
-        "No TCGA or CPTAC samples were used in training."
+        "I used a multi-cohort design. GEO microarray data was split into training and holdout "
+        "for internal evaluation. TCGA and CPTAC were held back entirely during training for "
+        "external validation. "
+        "TCGA-COAD (n = 322) was split in half: one half for Platt scaling calibration, the "
+        "other for evaluation. Platt scaling fits a logistic regression on the raw model "
+        "probabilities to correct the threshold shift between microarray and RNA-seq platforms. "
+        "Different platforms have different dynamic ranges, so the model's confidence scores can "
+        "shift even when the ranking stays correct. Platt scaling fixes the threshold without "
+        "changing the ranking. "
+        "CPTAC-COAD (n = 105) was split the same way for a second external check. "
+        "Feature selection, scaling, and model training used only GEO data."
     )
 
 
@@ -521,20 +539,23 @@ def build_discussion_pathway_expansion() -> str:
 
 def build_introduction_p1() -> str:
     return (
-        "Proliferation rate is one of the stronger predictors of how colon cancer patients "
-        "respond to treatment and how long they survive. Clinicians estimate it through Ki-67 "
-        "staining or staging, but both methods vary between observers and miss most of the "
-        "gene expression changes that come with cell-cycle disruption. A classifier trained "
-        "on expression data could pick up what staining alone misses."
+        "Proliferation rate tells you a lot about how a colon cancer patient will do. "
+        "Doctors estimate it through Ki-67 staining or tumor staging, but both methods have "
+        "problems. Different pathologists reading the same Ki-67 slide can give different "
+        "scores. Staging is coarser and misses the molecular detail. I wanted to see if a "
+        "classifier trained on gene expression data could do better, or at least give a "
+        "consistent second opinion."
     )
 
 
 def build_introduction_p2() -> str:
     return (
-        "We trained four classifiers (Logistic Regression, Random Forest, XGBoost, MLP) on GEO "
-        "microarray data to predict high versus low proliferation from expression and clinical "
-        "covariates. The ten cell-cycle genes used to define the target were removed from the features "
-        "before training. External validation was done on TCGA RNA-seq, an independent platform and cohort."
+        "I trained four classifiers on GEO microarray data to predict high versus low proliferation "
+        "from gene expression plus age, sex, and stage. The ten cell-cycle genes that define the "
+        "target were removed from the features first. I wanted to make sure the models were learning "
+        "something about broader transcription patterns, not just reconstructing the same score. "
+        "External validation was done on TCGA RNA-seq, a completely different sequencing platform "
+        "from the microarray training data."
     )
 
 
@@ -544,17 +565,24 @@ def build_methods_p1(stats: dict) -> str:
         f"and {stats['n_features']} features after removing the ten signature genes. "
         f"Clinical covariates are age, sex, and stage. "
         f"Target class balance: {stats['class_balance']}. "
-        f"We used an 80/20 stratified split: {stats['train_n']} training, {stats['test_n']} holdout."
+        f"I used an 80/20 stratified split: {stats['train_n']} training, {stats['test_n']} holdout."
     )
 
 
 def build_methods_p2() -> str:
     return (
-        "Each model was wrapped in a scikit-learn Pipeline: standardization, variance filtering "
-        "(threshold = 0.01), SelectKBest using ANOVA F-scores, and the classifier. "
-        "Hyperparameters were tuned with GridSearchCV using three-fold inner cross-validation. "
-        "Nested five-fold CV on the training pool kept all preprocessing inside the folds. "
-        "Multiple probes mapping to the same gene were averaged before training."
+        "I chose these four models for different reasons. Logistic Regression lets me look at "
+        "the coefficients and see which genes drive the prediction. Random Forest and XGBoost "
+        "can pick up non-linear interactions. I added the MLP to test whether deep learning "
+        "helps on a dataset with only 585 samples, though I suspected it would not. "
+        "Each model went into a Pipeline: standardize, filter low-variance genes, select the "
+        "500 best by ANOVA F-score, then classify. "
+        "I learned why nested CV matters the hard way. My first pass used single-shot feature "
+        "selection on the whole training pool before cross-validation. The CV scores looked great. "
+        "The holdout performance was noticeably worse. The feature selection had peeked at all "
+        "the data, leaking information across folds. Wrapping everything inside a Pipeline and "
+        "using nested five-fold CV fixed this. The inner fold selects features on 4/5 of the "
+        "data, and the outer fold tests on the held-out 1/5. It is slower but the numbers are honest."
     )
 
 
@@ -628,7 +656,7 @@ def build_sensitivity_p1() -> str:
 def build_cox_paragraph() -> str:
     """Return a sentence about Cox PH results, conditional on actual p-value."""
     cox_path = project_root() / "results" / "cox_ph_model_summary.csv"
-    text = "We fit a multivariate Cox Proportional Hazards model to adjust for confounders."
+    text = "I fit a multivariate Cox Proportional Hazards model to adjust for confounders."
     if cox_path.exists():
         cox_df = pd.read_csv(cox_path)
         prolif_row = cox_df[cox_df['covariate'] == 'High_Proliferation']
@@ -648,6 +676,6 @@ def build_cox_paragraph() -> str:
 
 def build_discussion_benchmarking_intro() -> str:
     return (
-        "We compared ColoGrowth-ML against published prognostic classifiers for colorectal cancer "
+        "I compared ColoGrowth-ML against published prognostic classifiers for colorectal cancer "
         "(Table 9)."
     )

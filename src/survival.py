@@ -73,6 +73,10 @@ def run_survival_analysis(clinical_path, scores_path, results_dir, dataset_name)
         print(f"Dataset {dataset_name} lacks survival columns (os_time, os_event). Skipping.")
         return
     
+    # Handle duplicate columns from merged cohorts (geo_pan has two os_event columns)
+    if isinstance(merged['os_event'], pd.DataFrame):
+        merged = merged.loc[:, ~merged.columns.duplicated(keep='first')]
+
     # Convert string-valued os_event (TCGA uses "DECEASED"/"LIVING", GSE17538 uses "death"/"no death") to numeric
     if merged['os_event'].dtype == object:
         event_map = {'DECEASED': 1, 'LIVING': 0, 'Dead': 1, 'Alive': 0, 'death': 1, 'no death': 0}
