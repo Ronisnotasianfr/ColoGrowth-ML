@@ -923,7 +923,7 @@ Claude (Anthropic) was used as a coding assistant during implementation. All sci
 
 def main():
     parser = argparse.ArgumentParser(description="Build Word research paper from pipeline metrics")
-    parser.add_argument("--dataset", default="geo", choices=["geo", "tcga", "synthetic"])
+    parser.add_argument("--dataset", default="geo", choices=["geo", "geo_pan", "tcga", "tcga_pan", "synthetic"])
     args = parser.parse_args()
 
     base = project_root()

@@ -3,7 +3,10 @@
 import numpy as np
 import pandas as pd
 
-from src.preprocess import PROLIF_GENES
+PROLIF_GENES = [
+    'MKI67', 'PCNA', 'TOP2A', 'MCM2', 'MCM6',
+    'AURKA', 'BUB1', 'CCNB1', 'CDK1', 'BIRC5'
+]
 
 
 def generate_synthetic_data(n_samples=300, n_genes=2000):

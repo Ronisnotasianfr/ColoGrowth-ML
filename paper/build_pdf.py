@@ -405,7 +405,7 @@ def footer(canvas, doc):
 
 def main():
     parser = argparse.ArgumentParser(description="Build PDF research paper from pipeline metrics")
-    parser.add_argument("--dataset", default="geo", choices=["geo", "tcga", "synthetic"])
+    parser.add_argument("--dataset", default="geo", choices=["geo", "geo_pan", "tcga", "tcga_pan", "synthetic"])
     args = parser.parse_args()
 
     base = project_root()

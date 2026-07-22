@@ -588,7 +588,7 @@ def run_subgroup_analysis(X_test, y_test, model_names, dataset="geo_pan"):
             mask2 = subgroups[g2]
             if len(np.unique(y_test[mask1])) >= 2 and len(np.unique(y_test[mask2])) >= 2:
                 diff, lower, upper, p_val = bootstrap_subgroup_interaction(
-                    y_test.values, y_prob, mask1.values, mask2.values, n_bootstrap=1000, seed=42
+                    y_test, y_prob, mask1.values, mask2.values, n_bootstrap=1000, seed=42
                 )
                 interaction_results[g1] = (diff, lower, upper, p_val)
                 interaction_results[g2] = (diff, lower, upper, p_val)
@@ -812,6 +812,26 @@ def main():
         X, y, test_size=0.2, stratify=y, random_state=42
     )
     
+    # Re-binarize using training-only threshold to prevent label leakage
+    scores_path = os.path.join(DATA_DIR, f"{prefix}proliferation_scores.csv")
+    if os.path.exists(scores_path):
+        scores = pd.read_csv(scores_path, index_col=0)['score']
+        common_idx = X.index.intersection(scores.index)
+        scores = scores.loc[common_idx]
+        y = y.loc[common_idx]
+        X = X.loc[common_idx]
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, test_size=0.2, stratify=y, random_state=42
+        )
+        scores_train = scores.loc[X_train.index]
+        scores_test = scores.loc[X_test.index]
+        train_threshold = scores_train.median()
+        print(f"\nBinarization threshold computed from TRAINING data only: {train_threshold:.4f}")
+        print(f"  (Original all-data median was ~{scores.median():.4f})")
+        y_train = (scores_train >= train_threshold).astype(int).values
+        y_test = (scores_test >= train_threshold).astype(int).values
+        print(f"  Re-binarized: train={np.mean(y_train):.1%} high prolif, test={np.mean(y_test):.1%} high prolif")
+    
     # 1. Run baselines
     baselines = run_baselines(X_train, y_train, X_test, y_test)
     pd.DataFrame([baselines]).to_csv(os.path.join(RESULTS_DIR, "baseline_model_results.csv"), index=False)
@@ -851,11 +871,11 @@ def main():
         f1 = f1_score(y_test, y_pred)
         auc = roc_auc_score(y_test, y_prob)
         brier = brier_score_loss(y_test, y_prob)
-        ece = expected_calibration_error(y_test.values, y_prob)
+        ece = expected_calibration_error(y_test, y_prob)
         
         # Bootstrap CIs
-        acc_low, acc_high = compute_bootstrap_ci(y_test.values, y_pred, accuracy_score)
-        auc_low, auc_high = compute_bootstrap_ci(y_test.values, y_prob, roc_auc_score)
+        acc_low, acc_high = compute_bootstrap_ci(y_test, y_pred, accuracy_score)
+        auc_low, auc_high = compute_bootstrap_ci(y_test, y_prob, roc_auc_score)
         
         metrics_records.append({
             'Model': name,
@@ -895,7 +915,7 @@ def main():
             name_a = loaded_models[i]
             name_b = loaded_models[j]
             mean_diff, p_val = bootstrap_roc_comparison(
-                y_test.values, model_probs[name_a], model_probs[name_b]
+                y_test, model_probs[name_a], model_probs[name_b]
             )
             pairwise_records.append({
                 'Model_A': name_a,

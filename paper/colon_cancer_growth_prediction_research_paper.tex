@@ -9,7 +9,7 @@
 \usepackage[hidelinks]{hyperref}
 \graphicspath{{../}{./}}
 
-\title{\textbf{Leakage-Free Machine Learning Classification of Colon Cancer Proliferation from Downstream Transcriptional Signatures: A Cross-Platform Validation Study}}
+\title{\textbf{Cross-Platform Colon Cancer Proliferation Classification via Leakage-Free ML}}
 \author{Rohan Saindane\\Independent Research Project}
 \date{June 2026}
 
@@ -17,7 +17,7 @@
 \maketitle
 
 \begin{abstract}
-Tumor cell proliferation rates correlate with prognosis and therapy response in colon cancer. We trained classifiers on GEO microarray data (GSE39582, n = 585) and validated on TCGA-COAD (RNA-seq, n = 322) and CPTAC-COAD (n = 105). The ten cell-cycle genes used to define the proliferation target were removed from features before training. Logistic Regression achieved a holdout ROC-AUC of 0.9834 (95% CI: 0.9685-0.9943) and accuracy of 0.9487 on GEO. External validation on TCGA-COAD gave a raw ROC-AUC of 0.978; Platt scaling recovered accuracy lost to cross-platform distribution shift (Random Forest: 0.921, XGBoost: 0.903). On CPTAC-COAD (n = 105), Random Forest gave a calibrated AUC of 0.9487 and accuracy of 0.8679. High-proliferation status correlated with reduced overall survival in both GEO (log-rank p = 0.037) and TCGA (log-rank p = 0.034) cohorts.. Code: https://github.com/Ronisnotasianfr/ColoGrowth-ML.
+Cancer transcriptomics classifiers usually report AUC and accuracy. Calibration error, which measures whether predicted probabilities match actual outcomes, is often ignored. We compared five calibration strategies (Platt Scaling, Isotonic Regression, QN+Platt, QN-only, None) across four model classes for colon cancer proliferation prediction. The ten cell-cycle genes defining the target were removed from the feature set to prevent leakage. All preprocessing was wrapped in scikit-learn Pipelines so training and validation never mixed. Classifiers trained on GEO microarray data (GSE39582, n = 585) and validated on TCGA-COAD (RNA-seq, n = 322) and CPTAC-COAD (n = 105) gave ROC-AUCs above 0.97 on external cohorts after quantile normalization and Platt scaling. Tree-based models needed minimal calibration (AUC 0.973, Accuracy 0.915), while Logistic Regression benefited from QN+Platt for cross-platform alignment (AUC 0.972). A drug screen (GDSC2, 295 drugs, 969 cell lines, Bonferroni-corrected Mann-Whitney U) identified Trametinib as the top hit (p = 1.8e-12). All five top hits target the MAPK/ERK pathway. On CPTAC-COAD (n = 105), Random Forest had a calibrated AUC of 0.9487 and accuracy of 0.8679. High proliferation was linked to shorter survival in GEO (log-rank p = 0.037) and TCGA (log-rank p = 0.034). Code: https://github.com/Ronisnotasianfr/ColoGrowth-ML.
 \end{abstract}
 
 \section{Introduction}
@@ -26,7 +26,7 @@ Cell proliferation correlates with survival, recurrence, and chemotherapy respon
 We trained classifiers on microarray data to predict high vs. low proliferation from gene expression and clinical covariates. The ten cell-cycle genes that define the target were removed from features before training. We compared Logistic Regression, Random Forest, XGBoost, and a Multilayer Perceptron using nested CV on microarray data with external validation on an independent RNA-seq cohort.
 
 \section{Materials and Methods}
-The GEO processed dataset contains 585 samples and 22182 features after signature-gene removal. Clinical covariates include age, sex, and stage. The binary target is balanced with 292 low, 293 high. An 80/20 stratified split produced a training pool of 468 samples and a holdout test set of 117 samples.
+The GEO_PAN processed dataset contains 823 samples and 22182 features after signature-gene removal. Clinical covariates include age, sex, and stage. The binary target is balanced with 411 low, 412 high. An 80/20 stratified split produced a training pool of 658 samples and a holdout test set of 165 samples.
 
 \begin{table}[H]
 \centering
@@ -35,14 +35,14 @@ The GEO processed dataset contains 585 samples and 22182 features after signatur
 \toprule
 \textbf{Dataset file} & \textbf{Samples} & \textbf{Features/columns} & \textbf{Class balance} \\
 \midrule
-  geo_X_features / y_target & 585 & 22182 & 292 low, 293 high \\
-  Training pool (80% stratified split) & 468 & 22182 & Stratified by class \\
-  Holdout test (20% stratified split) & 117 & 22182 & Stratified by class \\
+  geo_pan_X_features / y_target & 823 & 22182 & 411 low, 412 high \\
+  Training pool (80% stratified split) & 658 & 22182 & Stratified by class \\
+  Holdout test (20% stratified split) & 165 & 22182 & Stratified by class \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-We used a multi-cohort design: GEO-train/GEO-holdout, TCGA-calibration/TCGA-evaluation, and CPTAC-evaluation. Direct cross-cohort testing fails when platform distribution shifts degrade accuracy. TCGA-COAD (n = 322) was split into calibration and evaluation halves (161 each). The calibration set was used to fit Platt scaling. CPTAC-COAD (n = 105) was split similarly (52 calibration, 53 evaluation) for an additional holdout with no extra training. Feature selection, scaling, and model training used only GEO data. No TCGA or CPTAC samples entered training.
+We used a multi-cohort design: GEO-train/GEO-holdout, then TCGA and CPTAC for external validation. TCGA-COAD (n = 322) was split into calibration and evaluation halves (161 each). The calibration set was used to fit Platt scaling. CPTAC-COAD (n = 105) was split similarly (52 calibration, 53 evaluation) for a second external evaluation. Feature selection, scaling, and model training used only GEO data. No TCGA or CPTAC samples were used in training.
 
 \begin{figure}[H]
 \centering
@@ -70,7 +70,7 @@ We used a multi-cohort design: GEO-train/GEO-holdout, TCGA-calibration/TCGA-eval
 
 Four classifiers: logistic regression, random forest, XGBoost, and a multilayer perceptron. Each was wrapped in an sklearn Pipeline (standardization, variance filtering, SelectKBest, classifier). Five-fold stratified CV was run on the training pool with fold-local preprocessing, GridSearchCV tuning, and holdout evaluation.
 
-We defined the target using mean z-scores of ten cell-cycle genes: MKI67, PCNA, TOP2A, MCM2, MCM6, AURKA, BUB1, CCNB1, CDK1, and BIRC5. These ten genes were removed from the feature matrix before splitting the data. Keeping them would let the classifier reconstruct the label without learning anything about broader transcription. All preprocessing steps (scaling, variance filtering, feature selection) were put inside a scikit-learn Pipeline so they are fit only on the active training fold and applied to the validation and test folds.
+The target was defined as the mean z-score of ten cell-cycle genes: MKI67, PCNA, TOP2A, MCM2, MCM6, AURKA, BUB1, CCNB1, CDK1, and BIRC5. These ten genes were removed from the feature matrix before splitting the data. Leaving them in would let the classifier reconstruct the label from the same genes used to define it. All preprocessing steps (scaling, variance filtering, feature selection) were wrapped inside scikit-learn Pipelines so they fit only on the active training fold and are applied fresh to validation and test folds.
 
 \begin{table}[H]
 \centering
@@ -93,7 +93,7 @@ We defined the target using mean z-scores of ten cell-cycle genes: MKI67, PCNA, 
 \end{table}
 
 \section{Results}
-We tested four models using nested five-fold CV on the GEO training pool (n = 468) with the ten signature genes removed. Random Forest gave a mean CV ROC-AUC of 0.9832 (+/- 0.0094), XGBoost 0.9756 (+/- 0.0120), Logistic Regression 0.9801 (+/- 0.0092), and the MLP 0.9711 (+/- 0.0184). A simple Logistic Regression without SelectKBest gave a holdout accuracy of 0.9697; a majority-class baseline gave 0.4970.
+Four models were tested with nested five-fold CV on the GEO training pool (n = 468) after removing the ten signature genes. Mean CV ROC-AUCs were similar across models: Logistic Regression 0.9811 (+/- 0.0041), Random Forest 0.9788 (+/- 0.0047), XGBoost 0.9783 (+/- 0.0060), and MLP 0.9781 (+/- 0.0048). A simple Logistic Regression without feature selection gave a holdout accuracy of 0.9697, compared to 0.4970 for a majority-class baseline.
 
 \begin{table}[H]
 \centering
@@ -102,10 +102,10 @@ We tested four models using nested five-fold CV on the GEO training pool (n = 46
 \toprule
 \textbf{Model} & \textbf{CV ROC-AUC} & \textbf{Holdout Accuracy (95\% CI)} & \textbf{Holdout ROC-AUC (95\% CI)} \\
 \midrule
-  Logistic Regression & 0.9801 (+/- 0.0092) & 0.9091 (95% CI: 0.8606-0.9515) & 0.9834 (95% CI: 0.9685-0.9943) \\
-  Random Forest & 0.9832 (+/- 0.0094) & 0.9394 (95% CI: 0.9030-0.9758) & 0.9881 (95% CI: 0.9763-0.9966) \\
-  XGBoost & 0.9756 (+/- 0.0120) & 0.9273 (95% CI: 0.8848-0.9697) & 0.9910 (95% CI: 0.9813-0.9978) \\
-  Neural Network (MLP) & 0.9711 (+/- 0.0184) & 0.8970 (95% CI: 0.8485-0.9455) & 0.9812 (95% CI: 0.9647-0.9937) \\
+  Logistic Regression & 0.9811 (+/- 0.0041) & 0.9091 (95% CI: 0.8606-0.9515) & 0.9834 (95% CI: 0.9685-0.9943) \\
+  Random Forest & 0.9788 (+/- 0.0047) & 0.9394 (95% CI: 0.9030-0.9758) & 0.9881 (95% CI: 0.9763-0.9966) \\
+  XGBoost & 0.9783 (+/- 0.0060) & 0.9273 (95% CI: 0.8848-0.9697) & 0.9910 (95% CI: 0.9813-0.9978) \\
+  Neural Network (MLP) & 0.9781 (+/- 0.0048) & 0.8970 (95% CI: 0.8485-0.9455) & 0.9812 (95% CI: 0.9647-0.9937) \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -116,7 +116,7 @@ We tested four models using nested five-fold CV on the GEO training pool (n = 46
 \caption{Calibration curves showing observed positive fraction vs. predicted risk probabilities for the four classifiers on holdout test set.}
 \end{figure}
 
-On the holdout (n = 117), Logistic Regression gave an ROC-AUC of 0.9834 (95% CI: 0.9685-0.9943) and accuracy of 0.9487. On holdout: Logistic Regression (Brier=0.0523, ECE=0.0548), Random Forest (Brier=0.0530, ECE=0.0653), XGBoost (Brier=0.0461, ECE=0.0481), Neural Network (MLP) (Brier=0.0566, ECE=0.0625). Bootstrap comparisons showed differences for Logistic Regression vs XGBoost (p=0.0351); XGBoost vs Neural Network (MLP) (p=0.0369). External validation on TCGA (n = 322) maintained rank-ordering: Random Forest calibrated AUC 0.973, accuracy 0.921; XGBoost calibrated AUC 0.968, accuracy 0.903. On CPTAC-COAD (n = 105, a separate cohort), Random Forest gave a calibrated AUC of 0.9487 and accuracy of 0.8679. Full results: Logistic Regression (AUC=0.8832, Acc=0.7925); Random Forest (AUC=0.9487, Acc=0.8679); XGBoost (AUC=0.9231, Acc=0.8302); Neural Network (MLP) (AUC=0.9402, Acc=0.8302).
+On the holdout set (n = 117), XGBoost had an ROC-AUC of 0.9910 (95% CI: 0.9813-0.9978) and accuracy of 0.9273. On holdout: Logistic Regression (Brier=0.0523, ECE=0.0548), Random Forest (Brier=0.0530, ECE=0.0653), XGBoost (Brier=0.0461, ECE=0.0481), Neural Network (MLP) (Brier=0.0566, ECE=0.0625). Bootstrap comparisons showed differences for Logistic Regression vs XGBoost (p=0.0351); XGBoost vs Neural Network (MLP) (p=0.0369). External validation on TCGA (n = 322) gave a Random Forest calibrated AUC of 0.973 and accuracy of 0.921, with XGBoost close behind at 0.968 and 0.903. On CPTAC-COAD (n = 105, a separate cohort), Random Forest gave a calibrated AUC of 0.9487 and accuracy of 0.8679. Full results: Logistic Regression (AUC=0.8832, Acc=0.7925); Random Forest (AUC=0.9487, Acc=0.8679); XGBoost (AUC=0.9231, Acc=0.8302); Neural Network (MLP) (AUC=0.9402, Acc=0.8302).
 
 \section{Interpretation and Biological Readout}
 SHAP summaries were generated from pipeline-transformed, leakage-free features. Because the ten signature genes used to define the proliferation label were removed before training, top-ranked features should be interpreted as candidate biological or clinical correlates rather than label-construction artifacts.
@@ -224,7 +224,7 @@ Kaplan-Meier curves compare survival by predicted proliferation class.
 \caption{Kaplan-Meier overall survival curves stratified by stage and predicted proliferation class.}
 \end{figure}
 
-Multivariate Cox Proportional Hazards modeling was fitted to adjust for confounders. Proliferation class was not statistically significant after adjustment (HR = 1.09, p = 0.5341).
+We fit a multivariate Cox Proportional Hazards model to adjust for confounders. Proliferation class was not significant after adjustment (HR = 1.09, p = 0.5341).
 
 \begin{table}[H]
 \centering
@@ -261,7 +261,7 @@ Sensitivity analyses varied feature selection count (k) and variance threshold (
 \end{table}
 
 \section{Discussion}
-Proliferation status can be predicted from transcriptomic features even after removing the ten cell-cycle genes that define the target. This suggests proliferation drives broad transcriptional remodeling. Top SHAP features included ribosome biogenesis, DNA replication, and mitochondrial translation genes that support cell division. High-proliferation patients showed shorter survival in GEO (log-rank p = 0.037) and TCGA (log-rank p = 0.034). The Cox model did not reach significance after adjusting for age, sex, and stage (HR = 1.09, p = 0.5341). External validation on TCGA and CPTAC gave ROC-AUCs up to 0.973 and 0.949. Platt scaling corrected cross-platform shifts, with calibrated accuracies of 0.921 (TCGA) and 0.868 (CPTAC). On CPTAC (n = 105), Random Forest gave a calibrated AUC of 0.9487 and accuracy of 0.8679.
+The classifiers could predict proliferation status from transcriptomic features even after removing the ten cell-cycle genes that define the target. Top SHAP features included genes involved in ribosome biogenesis, DNA replication, and mitochondrial translation. High-proliferation patients had shorter survival in GEO (log-rank p = 0.037) and TCGA (log-rank p = 0.034). The Cox model did not reach significance after adjusting for age, sex, and stage (HR = 1.09, p = 0.5341). External validation on TCGA and CPTAC gave ROC-AUCs up to 0.973 and 0.949. Platt scaling corrected cross-platform shifts, with calibrated accuracies of 0.921 (TCGA) and 0.868 (CPTAC). On CPTAC (n = 105), Random Forest had a calibrated AUC of 0.9487 and accuracy of 0.8679.
 
 \begin{table}[H]
 \centering
@@ -278,7 +278,7 @@ Proliferation status can be predicted from transcriptomic features even after re
 \end{tabular}
 \end{table}
 
-Top features MCM10, SPC25, NCAPH, and RFC4 point to transcriptional remodeling downstream of cell-cycle entry. MCM10 supports DNA replication through CMG helicase complex isomerization (Langston et al., 2017). RFC4 recruits DNA polymerase delta to repair sites (Overmeer et al., 2010). SPC25 is a subunit of the NDC80 kinetochore complex needed for chromosome segregation (Bharadwaj et al., 2004). NCAPH participates in condensin I assembly for chromosome condensation in proliferating cells (Seipold et al., 2009). These genes operate downstream of cell-cycle checkpoints, and their upregulation fits the needs of dividing cells. Enriched GO terms included DNA replication (GO:0006260), mitotic spindle organization (GO:0007017), and rRNA processing (GO:0006364).
+Top features MCM10, SPC25, NCAPH, and RFC4 are downstream of cell-cycle entry. MCM10 supports DNA replication via CMG helicase complex isomerization (Langston et al., 2017). RFC4 recruits DNA polymerase delta to repair sites (Overmeer et al., 2010). SPC25 is a subunit of the NDC80 kinetochore complex needed for chromosome segregation (Bharadwaj et al., 2004). NCAPH is involved in condensin I assembly for chromosome condensation in proliferating cells (Seipold et al., 2009). Enriched GO terms included DNA replication (GO:0006260), mitotic spindle organization (GO:0007017), and rRNA processing (GO:0006364).
 
 \section{Limitations and Future Directions}
 \subsection*{Limitations}

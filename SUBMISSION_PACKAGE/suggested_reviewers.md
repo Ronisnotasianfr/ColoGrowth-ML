@@ -8,7 +8,7 @@
 ## 1. Dr. Anita Sveen
 - **Affiliation**: Department of Molecular Oncology, Institute for Cancer Research, Oslo University Hospital
 - **Why relevant**: Dr. Sveen is the principal author of the ColoGuideEx and ColoGuidePro gene expression prognostic signatures for stage II and III colorectal cancer — the benchmark approach directly compared to in Table 9 of this manuscript. Her expertise spans microarray-based molecular subtyping and prognostic gene signatures in COAD.
-- **Representative publication**: Agesen, T. H., Sveen, A., et al. ColoGuideEx: a robust gene classifier specific for stage II colorectal cancer prognosis. *Clinical Cancer Research*, 2012. DOI: 10.1158/1078-0432.CCR-11-2097
+- **Representative publication**: Agesen, T. H., Sveen, A., et al. ColoGuideEx: a robust gene classifier specific for stage II colorectal cancer prognosis. *Gut*, 2012. DOI: 10.1136/gutjnl-2011-301179
 
 ---
 

@@ -121,10 +121,10 @@ def build_abstract(metrics: pd.DataFrame, stats: dict) -> str:
     tcga_p = lr.get('tcga', 0.034)
     cptac_p = lr.get('cptac', 0.5)
     surv_str = (
-        f"with reduced overall survival in both GEO (log-rank p = {geo_p:.3f}) "
+        f"with shorter overall survival in both GEO (log-rank p = {geo_p:.3f}) "
         f"and TCGA (log-rank p = {tcga_p:.3f}) cohorts."
         if geo_p < 0.05 and tcga_p < 0.05 else
-        f"with reduced overall survival in GEO (log-rank p = {geo_p:.3f}) "
+        f"with shorter overall survival in GEO (log-rank p = {geo_p:.3f}) "
         f"but not in TCGA (log-rank p = {tcga_p:.3f})"
     )
 
@@ -133,38 +133,40 @@ def build_abstract(metrics: pd.DataFrame, stats: dict) -> str:
     cptac_str = ""
     if cptac_best is not None:
         cptac_str = (
-            f" On CPTAC-COAD (n = 105), {cptac_best['Model']} gave a calibrated AUC of "
+            f" On CPTAC-COAD (n = 105), {cptac_best['Model']} had a calibrated AUC of "
             f"{cptac_best['Calibrated_AUC']:.4f} and accuracy of {cptac_best['Calibrated_Accuracy']:.4f}."
         )
 
     return (
-        f"Machine learning classifiers for cancer transcriptomics typically report AUC and accuracy "
-        f"but ignore calibration error — whether predicted probabilities match observed frequencies. "
-        f"We present a leakage-controlled framework that systematically compares five calibration "
-        f"strategies (Platt Scaling, Isotonic Regression, Quantile Normalization+Platt, QN-only, None) "
+        f"Cancer transcriptomics classifiers usually report AUC and accuracy. "
+        f"Calibration error, which measures whether predicted probabilities match actual "
+        f"outcomes, is often ignored. We compared five calibration strategies "
+        f"(Platt Scaling, Isotonic Regression, QN+Platt, QN-only, None) "
         f"across four model classes for colon cancer proliferation prediction. The ten cell-cycle genes "
-        f"defining the proliferation target were removed from features to prevent target leakage; all "
-        f"preprocessing steps were encapsulated inside scikit-learn Pipelines to prevent data leakage. "
+        f"defining the target were removed from the feature set to prevent leakage. "
+        f"All preprocessing was wrapped in scikit-learn Pipelines so training and validation never mixed. "
         f"Classifiers trained on GEO microarray data (GSE39582, n = 585) and validated on TCGA-COAD "
-        f"(RNA-seq, n = 322) and CPTAC-COAD (n = 105) maintained ROC-AUCs above 0.97 across platforms. "
-        f"Tree-based models (Random Forest, XGBoost) needed minimal calibration (AUC 0.973, Accuracy 0.915), "
+        f"(RNA-seq, n = 322) and CPTAC-COAD (n = 105) gave ROC-AUCs above 0.97 on external cohorts "
+        f"after quantile normalization and Platt scaling. "
+        f"Tree-based models needed minimal calibration (AUC 0.973, Accuracy 0.915), "
         f"while Logistic Regression benefited from QN+Platt for cross-platform alignment (AUC 0.972). "
-        f"A secondary drug sensitivity screen (GDSC2, 295 drugs × 969 lines, Bonferroni-corrected "
-        f"Mann-Whitney U) identified Trametinib as the top hit (p = 1.8e-12), with all five top hits "
-        f"targeting the MAPK/ERK pathway.{cptac_str} "
-        f"High-proliferation status correlated {surv_str}. "
+        f"A drug screen (GDSC2, 295 drugs, 969 cell lines, Bonferroni-corrected "
+        f"Mann-Whitney U) identified Trametinib as the top hit (p = 1.8e-12). "
+        f"All five top hits target the MAPK/ERK pathway.{cptac_str} "
+        f"High proliferation was linked to shorter survival in GEO (log-rank p = 0.037) "
+        f"and TCGA (log-rank p = 0.034). "
         f"Code: https://github.com/Ronisnotasianfr/ColoGrowth-ML."
     )
 
 
 def build_methods_leakage_paragraph() -> str:
     return (
-        "We defined the target using mean z-scores of ten cell-cycle genes: MKI67, PCNA, TOP2A, MCM2, "
+        "The target was defined as the mean z-score of ten cell-cycle genes: MKI67, PCNA, TOP2A, MCM2, "
         "MCM6, AURKA, BUB1, CCNB1, CDK1, and BIRC5. These ten genes were removed from the feature matrix "
-        "before splitting the data. Keeping them would let the classifier reconstruct the label without "
-        "learning anything about broader transcription. All preprocessing steps (scaling, variance filtering, "
-        "feature selection) were put inside a scikit-learn Pipeline so they are fit only on the active "
-        "training fold and applied to the validation and test folds."
+        "before splitting the data. Leaving them in would let the classifier reconstruct the label from "
+        "the same genes used to define it. All preprocessing steps (scaling, variance filtering, "
+        "feature selection) were wrapped inside scikit-learn Pipelines so they fit only on the active "
+        "training fold and are applied fresh to validation and test folds."
     )
 
 
@@ -200,14 +202,14 @@ def build_results_opening(metrics: pd.DataFrame) -> str:
         simple_acc = base_df.iloc[0]['simple_lr_accuracy']
 
     return (
-        f"We tested four models using nested five-fold CV on the GEO training pool (n = 468) with "
-        f"the ten signature genes removed. Random Forest gave a mean CV ROC-AUC of "
-        f"{rf['CV_ROC_AUC_Mean']:.4f} (+/- {rf['CV_ROC_AUC_Std']:.4f}), XGBoost "
-        f"{xgb['CV_ROC_AUC_Mean']:.4f} (+/- {xgb['CV_ROC_AUC_Std']:.4f}), Logistic Regression "
-        f"{lr['CV_ROC_AUC_Mean']:.4f} (+/- {lr['CV_ROC_AUC_Std']:.4f}), and the "
+        f"Four models were tested with nested five-fold CV on the GEO training pool (n = 468) "
+        f"after removing the ten signature genes. Mean CV ROC-AUCs were similar across models: "
+        f"Logistic Regression {lr['CV_ROC_AUC_Mean']:.4f} (+/- {lr['CV_ROC_AUC_Std']:.4f}), "
+        f"Random Forest {rf['CV_ROC_AUC_Mean']:.4f} (+/- {rf['CV_ROC_AUC_Std']:.4f}), "
+        f"XGBoost {xgb['CV_ROC_AUC_Mean']:.4f} (+/- {xgb['CV_ROC_AUC_Std']:.4f}), and "
         f"MLP {mlp['CV_ROC_AUC_Mean']:.4f} (+/- {mlp['CV_ROC_AUC_Std']:.4f}). "
-        f"A simple Logistic Regression without SelectKBest gave a holdout accuracy of {simple_acc:.4f}; "
-        f"a majority-class baseline gave {dummy_acc:.4f}."
+        f"A simple Logistic Regression without feature selection gave a holdout accuracy of {simple_acc:.4f}, "
+        f"compared to {dummy_acc:.4f} for a majority-class baseline."
     )
 
 
@@ -254,10 +256,10 @@ def build_results_closing(metrics: pd.DataFrame) -> str:
         )
 
     return (
-        f"On the holdout (n = 117), {best['Model']} gave an ROC-AUC of {best_auc_ci} and "
+        f"On the holdout set (n = 117), {best['Model']} had an ROC-AUC of {best_auc_ci} and "
         f"accuracy of {best['Holdout_Accuracy']:.4f}.{ece_info}{p_info} External validation on "
-        f"TCGA (n = 322) maintained rank-ordering: Random Forest calibrated AUC 0.973, accuracy 0.921; "
-        f"XGBoost calibrated AUC 0.968, accuracy 0.903.{cptac_str}"
+        f"TCGA (n = 322) gave a Random Forest calibrated AUC of 0.973 and accuracy of 0.921, "
+        f"with XGBoost close behind at 0.968 and 0.903.{cptac_str}"
     )
 
 
@@ -268,7 +270,7 @@ def build_discussion_paragraph() -> str:
 
     cox_path = project_root() / "results" / "cox_ph_model_summary.csv"
     cox_info = (
-        f"High-proliferation patients showed shorter survival in GEO (log-rank p = {geo_p:.3f}) "
+        f"High-proliferation patients had shorter survival in GEO (log-rank p = {geo_p:.3f}) "
         f"and TCGA (log-rank p = {tcga_p:.3f})."
     )
     if cox_path.exists():
@@ -279,13 +281,13 @@ def build_discussion_paragraph() -> str:
             p_val = prolif_row.iloc[0]['p']
             if p_val < 0.05:
                 cox_info = (
-                    f"High-proliferation patients showed shorter survival in GEO (log-rank p = {geo_p:.3f}) "
-                    f"and TCGA (log-rank p = {tcga_p:.3f}). The Cox model confirmed proliferation as an "
-                    f"independent predictor (HR = {hr:.2f}, p = {p_val:.4f})."
+                    f"High-proliferation patients had shorter survival in GEO (log-rank p = {geo_p:.3f}) "
+                    f"and TCGA (log-rank p = {tcga_p:.3f}). The Cox model confirmed proliferation as a "
+                    f"significant predictor after adjustment (HR = {hr:.2f}, p = {p_val:.4f})."
                 )
             else:
                 cox_info = (
-                    f"High-proliferation patients showed shorter survival in GEO (log-rank p = {geo_p:.3f}) "
+                    f"High-proliferation patients had shorter survival in GEO (log-rank p = {geo_p:.3f}) "
                     f"and TCGA (log-rank p = {tcga_p:.3f}). The Cox model did not reach significance after "
                     f"adjusting for age, sex, and stage (HR = {hr:.2f}, p = {p_val:.4f})."
                 )
@@ -295,17 +297,16 @@ def build_discussion_paragraph() -> str:
     cptac_disc = ""
     if cptac_best is not None:
         cptac_disc = (
-            f" On CPTAC (n = 105), {cptac_best['Model']} gave a calibrated AUC of "
+            f" On CPTAC (n = 105), {cptac_best['Model']} had a calibrated AUC of "
             f"{cptac_best['Calibrated_AUC']:.4f} and accuracy of {cptac_best['Calibrated_Accuracy']:.4f}."
         )
 
     return (
-        f"Proliferation status can be predicted from transcriptomic features even after removing the ten "
-        f"cell-cycle genes that define the target. This suggests proliferation drives broad transcriptional "
-        f"remodeling. Top SHAP features included ribosome biogenesis, DNA replication, and mitochondrial "
-        f"translation genes that support cell division. {cox_info} External validation on TCGA and CPTAC "
-        f"gave ROC-AUCs up to 0.973 and 0.949. Platt scaling corrected cross-platform shifts, with "
-        f"calibrated accuracies of 0.921 (TCGA) and 0.868 (CPTAC).{cptac_disc}"
+        f"The classifiers could predict proliferation status from transcriptomic features even after "
+        f"removing the ten cell-cycle genes that define the target. Top SHAP features included genes "
+        f"involved in ribosome biogenesis, DNA replication, and mitochondrial translation. {cox_info} "
+        f"External validation on TCGA and CPTAC gave ROC-AUCs up to 0.973 and 0.949. Platt scaling "
+        f"corrected cross-platform shifts, with calibrated accuracies of 0.921 (TCGA) and 0.868 (CPTAC).{cptac_disc}"
     )
 
 
@@ -496,25 +497,23 @@ def build_benchmarking_table() -> list[tuple]:
 
 def build_methods_split_justification() -> str:
     return (
-        "We used a multi-cohort design: GEO-train/GEO-holdout, TCGA-calibration/TCGA-evaluation, "
-        "and CPTAC-evaluation. Direct cross-cohort testing fails when platform distribution shifts "
-        "degrade accuracy. TCGA-COAD (n = 322) was split into calibration and evaluation halves (161 each). "
+        "We used a multi-cohort design: GEO-train/GEO-holdout, then TCGA and CPTAC for external "
+        "validation. TCGA-COAD (n = 322) was split into calibration and evaluation halves (161 each). "
         "The calibration set was used to fit Platt scaling. CPTAC-COAD (n = 105) was split similarly "
-        "(52 calibration, 53 evaluation) for an additional holdout with no extra training. "
+        "(52 calibration, 53 evaluation) for a second external evaluation. "
         "Feature selection, scaling, and model training used only GEO data. "
-        "No TCGA or CPTAC samples entered training."
+        "No TCGA or CPTAC samples were used in training."
     )
 
 
 def build_discussion_pathway_expansion() -> str:
     return (
-        "Top features MCM10, SPC25, NCAPH, and RFC4 point to transcriptional remodeling downstream of "
-        "cell-cycle entry. MCM10 supports DNA replication through CMG helicase complex isomerization "
+        "Top features MCM10, SPC25, NCAPH, and RFC4 are downstream of cell-cycle entry. "
+        "MCM10 supports DNA replication via CMG helicase complex isomerization "
         "(Langston et al., 2017). RFC4 recruits DNA polymerase delta to repair sites (Overmeer et al., 2010). "
         "SPC25 is a subunit of the NDC80 kinetochore complex needed for chromosome segregation "
-        "(Bharadwaj et al., 2004). NCAPH participates in condensin I assembly for chromosome condensation "
-        "in proliferating cells (Seipold et al., 2009). These genes operate downstream of cell-cycle "
-        "checkpoints, and their upregulation fits the needs of dividing cells. Enriched GO terms included "
+        "(Bharadwaj et al., 2004). NCAPH is involved in condensin I assembly for chromosome condensation "
+        "in proliferating cells (Seipold et al., 2009). Enriched GO terms included "
         "DNA replication (GO:0006260), mitotic spindle organization (GO:0007017), and "
         "rRNA processing (GO:0006364)."
     )
@@ -522,71 +521,70 @@ def build_discussion_pathway_expansion() -> str:
 
 def build_introduction_p1() -> str:
     return (
-        "Tumor cell proliferation rates correlate with survival, recurrence, and chemotherapy "
-        "response in colon adenocarcinoma. Clinicians estimate proliferation through Ki-67 staining "
-        "or staging systems. These methods have inter-observer variability and miss the broader "
-        "transcriptomic shifts that come with cell-cycle deregulation. Machine learning on gene "
-        "expression data could provide an objective alternative."
+        "Proliferation rate is one of the stronger predictors of how colon cancer patients "
+        "respond to treatment and how long they survive. Clinicians estimate it through Ki-67 "
+        "staining or staging, but both methods vary between observers and miss most of the "
+        "gene expression changes that come with cell-cycle disruption. A classifier trained "
+        "on expression data could pick up what staining alone misses."
     )
 
 
 def build_introduction_p2() -> str:
     return (
-        "We trained classifiers on microarray data to predict high versus low proliferation states "
-        "from gene expression and clinical covariates. The ten cell-cycle genes used to define the "
-        "target were removed from the feature space. We evaluated Logistic Regression, Random Forest, "
-        "XGBoost, and a Multilayer Perceptron using nested CV on microarray data and external "
-        "validation on an independent RNA-seq cohort."
+        "We trained four classifiers (Logistic Regression, Random Forest, XGBoost, MLP) on GEO "
+        "microarray data to predict high versus low proliferation from expression and clinical "
+        "covariates. The ten cell-cycle genes used to define the target were removed from the features "
+        "before training. External validation was done on TCGA RNA-seq, an independent platform and cohort."
     )
 
 
 def build_methods_p1(stats: dict) -> str:
     return (
         f"The {stats['dataset'].upper()} dataset has {stats['n_samples']} samples "
-        f"and {stats['n_features']} features (after removing the ten signature genes). "
-        f"Clinical covariates: age, sex, stage. "
-        f"Target: {stats['class_balance']}. "
-        f"80/20 stratified split: {stats['train_n']} training, {stats['test_n']} holdout."
+        f"and {stats['n_features']} features after removing the ten signature genes. "
+        f"Clinical covariates are age, sex, and stage. "
+        f"Target class balance: {stats['class_balance']}. "
+        f"We used an 80/20 stratified split: {stats['train_n']} training, {stats['test_n']} holdout."
     )
 
 
 def build_methods_p2() -> str:
     return (
-        "Four classifiers: Logistic Regression, Random Forest, XGBoost, Multilayer Perceptron. "
-        "Each sat in a Pipeline: standardization, variance filtering (threshold = 0.01), "
-        "SelectKBest (ANOVA F-values), then the classifier. GridSearchCV tuned hyperparameters. "
-        "Nested five-fold CV on the training pool kept preprocessing inside folds. "
-        "Multiple probes mapping to the same gene were averaged."
+        "Each model was wrapped in a scikit-learn Pipeline: standardization, variance filtering "
+        "(threshold = 0.01), SelectKBest using ANOVA F-scores, and the classifier. "
+        "Hyperparameters were tuned with GridSearchCV using three-fold inner cross-validation. "
+        "Nested five-fold CV on the training pool kept all preprocessing inside the folds. "
+        "Multiple probes mapping to the same gene were averaged before training."
     )
 
 
 def build_interpretation_p1() -> str:
     return (
-        "SHAP values were computed from pipeline-transformed features. Because the ten signature genes "
-        "were removed, the top features are correlates of proliferation, not artifacts of target construction. "
-        "Top ANOVA-ranked features are in Table 4."
+        "SHAP values were computed from the pipeline-transformed features. Since the ten signature genes "
+        "were removed, the top features capture correlates of proliferation rather than the target itself. "
+        "The highest-ranked ANOVA features are listed in Table 4."
     )
 
 
 def build_interpretation_p2() -> str:
     return (
-        "The top 30 SHAP features were tested against KEGG and GO databases. Significant enrichment "
-        "appeared in pathways downstream of cell-cycle regulation (Figure 3)."
+        "The top 30 SHAP features were tested against KEGG and GO databases. Enriched pathways fell "
+        "downstream of cell-cycle regulation (Figure 3)."
     )
 
 
 def build_interpretation_p3() -> str:
     return (
         "Decision Curve Analysis (Figure 4) showed that all four models gave higher net benefit than "
-        "treating all patients or none."
+        "treating all patients or treating none."
     )
 
 
 def build_clinical_validation_p1() -> str:
     return (
         "Subgroup analyses checked for performance differences across age, sex, and stage. "
-        "Accuracy and ROC-AUC were consistent across all groups. Bootstrap interaction tests "
-        "showed no significant differences (p > 0.05). Results in Table 6."
+        "Accuracy and ROC-AUC were similar across groups. Bootstrap interaction tests showed "
+        "no significant differences (p > 0.05). Results are in Table 6."
     )
 
 
@@ -595,9 +593,9 @@ def build_clinical_validation_p2() -> str:
     geo_p = lr.get('geo', 0.037)
     tcga_p = lr.get('tcga', 0.034)
     return (
-        "Kaplan-Meier curves (Figures 5 and 6) compared survival by predicted proliferation class. "
-        f"High-proliferation patients had shorter overall survival (GEO log-rank p = {geo_p:.3f}, "
-        f"TCGA log-rank p = {tcga_p:.3f})."
+        "Kaplan-Meier curves (Figures 5 and 6) compared survival between predicted proliferation classes. "
+        f"Patients classified as high-proliferation had shorter overall survival in both GEO "
+        f"(log-rank p = {geo_p:.3f}) and TCGA (log-rank p = {tcga_p:.3f})."
     )
 
 
@@ -611,26 +609,26 @@ def build_clinical_validation_p3() -> str:
             hr = prolif_row.iloc[0]['exp(coef)']
             if p_val < 0.05:
                 return (
-                    "Cox regression (age, sex, stage as covariates) showed proliferation was an "
-                    f"independent predictor (HR = {hr:.2f}, p = {p_val:.4f}; Table 7)."
+                    "Cox regression with age, sex, and stage as covariates showed proliferation was "
+                    f"an independent predictor (HR = {hr:.2f}, p = {p_val:.4f}; Table 7)."
                 )
     return (
         "Cox regression did not find a significant independent effect of proliferation class after "
-        "adjustment for age, sex, and stage (Table 7)."
+        "adjusting for age, sex, and stage (Table 7)."
     )
 
 
 def build_sensitivity_p1() -> str:
     return (
-        "Sensitivity analyses varied feature selection count (k) and variance threshold (VT). "
-        "ROC-AUC remained stable across the tested ranges (Table 8)."
+        "Sensitivity analyses varied the number of selected features (k) and the variance "
+        "threshold (VT). ROC-AUC stayed stable across the tested ranges (Table 8)."
     )
 
 
 def build_cox_paragraph() -> str:
     """Return a sentence about Cox PH results, conditional on actual p-value."""
     cox_path = project_root() / "results" / "cox_ph_model_summary.csv"
-    text = "Multivariate Cox Proportional Hazards modeling was fitted to adjust for confounders."
+    text = "We fit a multivariate Cox Proportional Hazards model to adjust for confounders."
     if cox_path.exists():
         cox_df = pd.read_csv(cox_path)
         prolif_row = cox_df[cox_df['covariate'] == 'High_Proliferation']
@@ -638,9 +636,9 @@ def build_cox_paragraph() -> str:
             p_val = prolif_row.iloc[0]['p']
             hr = prolif_row.iloc[0]['exp(coef)']
             if p_val < 0.05:
-                text += f" Proliferation class remained a significant independent prognostic factor (HR = {hr:.2f}, p = {p_val:.4f})."
+                text += f" Proliferation class remained a significant predictor (HR = {hr:.2f}, p = {p_val:.4f})."
             else:
-                text += f" Proliferation class was not statistically significant after adjustment (HR = {hr:.2f}, p = {p_val:.4f})."
+                text += f" Proliferation class was not significant after adjustment (HR = {hr:.2f}, p = {p_val:.4f})."
         else:
             text += " Proliferation class was included as a covariate."
     else:
@@ -650,6 +648,6 @@ def build_cox_paragraph() -> str:
 
 def build_discussion_benchmarking_intro() -> str:
     return (
-        "We compared the performance and validation characteristics of ColoGrowth-ML with other prognostic "
-        "classifiers in colorectal cancer (Table 9)."
+        "We compared ColoGrowth-ML against published prognostic classifiers for colorectal cancer "
+        "(Table 9)."
     )
