@@ -1,0 +1,1010 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cross-Platform Colon Cancer Proliferation Classification</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700;800;900&family=Source+Serif+4:wght@300;400;500;600;700;800;900&display=swap">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+:root {
+    --primary: #1B2A4A;
+    --secondary: #E85D75;
+    --accent: #F4D35E;
+    --background: #F8F9FA;
+    --surface: #FFFFFF;
+    --text: #222222;
+    --text-light: #ffffff;
+    --cell-border: rgba(0,168,204,0.15);
+    --poster-bg: #e8eaed;
+    --cell-radius: 4mm;
+    --cell-shadow: 0 2mm 8mm rgba(0,0,0,0.08);
+    --cell-border-width: 0.3mm;
+    --cell-padding: 6mm;
+    --cell-gap: 4mm;
+    --column-gap: 8mm;
+    --poster-margin: 10mm;
+    --header-padding: 6mm 10mm;
+    --body-bg: #F8F9FA;
+    --img-border: none;
+    --img-radius: 1mm;
+    --font-heading: 'DM Sans', serif;
+    --font-body: 'Source Serif 4', sans-serif;
+    --font-scale: 1.0;
+    --cell-heading-size: calc(10mm * var(--font-scale));
+    --cell-heading-weight: 800;
+    --poster-width: 48in;
+    --poster-height: 36in;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+    background: #888;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    min-height: 100vh;
+    padding: 70px 20px 20px;
+    overflow: auto;
+}
+
+.poster-viewport {
+    transform-origin: top center;
+}
+
+.poster {
+    width: var(--poster-width);
+    height: var(--poster-height);
+    background: var(--poster-bg);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+}
+
+/* Header */
+.poster-header {
+    background: linear-gradient(135deg, #1B2A4A 0%, #2C3E6B 100%);
+    color: var(--text-light);
+    display: flex;
+    align-items: center;
+    padding: var(--header-padding);
+    gap: 8mm;
+    flex-shrink: 0;
+}
+.logos {
+    display: flex;
+    flex-direction: column;
+    gap: 3mm;
+    flex-shrink: 0;
+    align-items: center;
+}
+.logos img {
+    height: 55mm;
+    width: auto;
+    max-width: 90mm;
+    object-fit: contain;
+}
+.poster-header .title-block {
+    flex: 1;
+    text-align: center;
+}
+.poster-header .title-block h1 {
+    font-family: var(--font-heading);
+    font-size: calc(16mm * var(--font-scale));
+    font-weight: 800;
+    line-height: 1.2;
+    margin-bottom: 2mm;
+}
+.poster-header .title-block .subtitle {
+    font-family: var(--font-body);
+    font-size: calc(9mm * var(--font-scale));
+    opacity: 0.9;
+    margin-bottom: 2mm;
+}
+.authors-block {
+    font-family: var(--font-body);
+    font-size: calc(7mm * var(--font-scale));
+}
+.authors { margin-bottom: 1mm; }
+.author { font-weight: 600; }
+.affiliations { font-size: calc(6mm * var(--font-scale)); opacity: 0.85; }
+.qr-code {
+    flex-shrink: 0;
+    background: white;
+    padding: 4mm;
+    border-radius: 4mm;
+    display: flex;
+    align-items: center;
+    gap: 4mm;
+}
+.qr-svg svg {
+    width: 55mm;
+    height: 55mm;
+    display: block;
+}
+.qr-label {
+    font-size: 7mm;
+    color: #333;
+    font-family: var(--font-heading);
+    font-weight: 700;
+    max-width: 40mm;
+    line-height: 1.3;
+}
+
+/* Body - column layout */
+.poster-body {
+    flex: 1;
+    display: flex;
+    flex-direction: row;
+    padding: var(--poster-margin);
+    gap: var(--column-gap);
+    overflow: hidden;
+    min-height: 0;
+    background: var(--body-bg, var(--background));
+    position: relative;
+}
+.poster-column {
+    display: flex;
+    flex-direction: column;
+    gap: var(--cell-gap);
+    min-width: 0;
+    min-height: 0;
+}
+
+/* Cells */
+.cell {
+    background: var(--surface);
+    border-radius: var(--cell-radius);
+    box-shadow: var(--cell-shadow);
+    border: var(--cell-border-width) solid var(--cell-border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+    min-height: 0;
+}
+.cell-header {
+    color: var(--primary);
+    font-family: var(--font-heading);
+    font-size: var(--cell-heading-size);
+    font-weight: var(--cell-heading-weight);
+    padding: 4mm var(--cell-padding) 2mm;
+    flex-shrink: 0;
+    border-bottom: none;
+}
+.cell-content-wrapper {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+}
+.cell-content {
+    transform-origin: top left;
+    padding: 2mm var(--cell-padding) 3mm;
+    font-family: var(--font-body);
+    font-size: calc(6mm * var(--font-scale));
+    color: var(--text);
+    line-height: 1.5;
+}
+.cell-content h3 {
+    font-family: var(--font-heading);
+    font-size: calc(5.5mm * var(--font-scale));
+    font-weight: 700;
+    margin: 3mm 0 2mm;
+    color: var(--primary);
+}
+.cell-content h4 {
+    font-family: var(--font-heading);
+    font-size: calc(5mm * var(--font-scale));
+    font-weight: 600;
+    margin: 2mm 0 1.5mm;
+}
+.cell-content p {
+    margin: 2mm 0;
+}
+.cell-content ul, .cell-content ol {
+    margin: 2mm 0;
+    padding-left: 10mm;
+}
+.cell-content ol {
+    padding-left: 12mm;
+}
+.cell-content li {
+    margin: 1mm 0;
+}
+.cell-content img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 3mm auto;
+    border-radius: var(--img-radius);
+    border: var(--img-border);
+}
+
+/* Image grid - side by side images with captions below */
+.image-grid {
+    display: flex;
+    gap: 2mm;
+    margin: 1.5mm 0;
+    align-items: stretch;
+    position: relative;
+}
+.image-grid figure {
+    flex: 1;
+    text-align: center;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+.image-grid figure .grid-img-wrap {
+    flex: 1;
+    display: flex;
+    align-items: flex-end;
+    min-height: 0;
+}
+.image-grid.align-top figure .grid-img-wrap { align-items: flex-start; }
+.image-grid.align-center figure .grid-img-wrap { align-items: center; }
+.image-grid figure .grid-img-wrap img {
+    width: 100%;
+    height: auto;
+    margin: 0;
+    display: block;
+    border-radius: var(--img-radius);
+    border: var(--img-border);
+}
+.image-grid figure figcaption {
+    font-size: calc(4mm * var(--font-scale));
+    color: var(--text);
+    padding-top: 1mm;
+    font-weight: 600;
+    text-align: center;
+    flex-shrink: 0;
+}
+.image-grid figure figcaption strong {
+    color: var(--primary);
+}
+
+/* Standalone image with caption */
+.img-figure {
+    text-align: center;
+    margin: 3mm 0;
+}
+.img-figure img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 0 auto;
+    border-radius: var(--img-radius);
+    border: var(--img-border);
+}
+.img-figure figcaption {
+    font-size: calc(4.5mm * var(--font-scale));
+    color: var(--text);
+    padding-top: 1.5mm;
+    font-weight: 600;
+    text-align: center;
+}
+.img-figure figcaption strong {
+    color: var(--primary);
+}
+
+/* Tables - contained within cells */
+.cell-content .table-wrapper {
+    width: 100%;
+    overflow-x: auto;
+    margin: 3mm 0;
+}
+.cell-content table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: calc(5mm * var(--font-scale));
+    table-layout: fixed;
+}
+.cell-content thead tr {
+    background-color: #00d4ff;
+}
+.cell-content th {
+    background: transparent;
+    color: #0f0f1a;
+    padding: 2mm 2mm;
+    text-align: left;
+    font-weight: 600;
+    font-size: calc(4.5mm * var(--font-scale));
+    overflow: hidden;
+    text-overflow: ellipsis;
+    border: none;
+}
+.cell-content td {
+    padding: 1.5mm 3mm;
+    border-bottom: 0.3mm solid rgba(0,0,0,0.1);
+}
+.cell-content tr:nth-child(even) td {
+    background: rgba(0,0,0,0.02);
+}
+.cell-content strong {
+    color: var(--primary);
+}
+.cell-content code {
+    background: rgba(0,0,0,0.06);
+    padding: 0.5mm 1.5mm;
+    border-radius: 1mm;
+    font-size: 0.9em;
+}
+.cell-content pre {
+    background: rgba(0,0,0,0.06);
+    padding: 3mm;
+    border-radius: 1.5mm;
+    overflow-x: auto;
+}
+.cell-content blockquote {
+    border-left: 1mm solid var(--secondary);
+    padding-left: 4mm;
+    margin: 3mm 0;
+    color: #666;
+    font-style: italic;
+}
+
+/* Split cells */
+.split-cell .split-container {
+    display: flex;
+    gap: 3mm;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+.subcell {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-height: 0;
+}
+.subcell-header {
+    color: var(--primary);
+    background: none;
+    font-size: calc(6mm * var(--font-scale));
+    font-weight: var(--cell-heading-weight);
+    padding: 2mm var(--cell-padding) 1mm;
+}
+
+/* Split cell divider drag handle — absolutely positioned overlay to avoid layout shift */
+.split-container {
+    position: relative;
+}
+.split-divider {
+    display: none;
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 10mm;
+    margin-left: -5mm;
+    cursor: col-resize;
+    z-index: 60;
+}
+.edit-mode .split-divider {
+    display: block;
+}
+.split-divider::after {
+    content: '';
+    position: absolute;
+    top: 5%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 1.5mm;
+    height: 90%;
+    background: var(--secondary);
+    border-radius: 1mm;
+    opacity: 0.3;
+    transition: opacity 0.2s, width 0.2s;
+}
+.split-divider:hover::after,
+.split-divider.active::after {
+    opacity: 0.9;
+    width: 3mm;
+}
+
+/* Mermaid */
+.mermaid {
+    display: flex;
+    justify-content: center;
+    margin: 3mm 0;
+}
+.mermaid svg {
+    max-width: 100%;
+    height: auto;
+}
+
+/* Math */
+.math-display {
+    margin: 3mm 0;
+    text-align: center;
+    font-size: calc(7mm * var(--font-scale));
+}
+
+/* Edit mode - hide editor elements by default */
+.resize-handle, .cell-actions {
+    display: none;
+}
+.edit-mode .cell {
+    cursor: grab;
+}
+.edit-mode .cell:active {
+    cursor: grabbing;
+}
+.edit-mode .cell.sortable-ghost {
+    opacity: 0.4;
+}
+.edit-mode .cell.sortable-chosen {
+    box-shadow: 0 0 0 3px var(--secondary);
+}
+.edit-mode .cell-actions {
+    display: flex;
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    gap: 4px;
+    z-index: 100;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+.edit-mode .cell:hover .cell-actions {
+    opacity: 1;
+}
+.cell-action-btn {
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 4px;
+    background: rgba(0,0,0,0.6);
+    color: white;
+    cursor: pointer;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.cell-action-btn:hover {
+    background: rgba(0,0,0,0.8);
+}
+
+/* Resize handle (bottom of cell for height) */
+.edit-mode .resize-handle {
+    display: block;
+    position: absolute;
+    bottom: 0;
+    left: 10%;
+    width: 80%;
+    height: 6px;
+    background: var(--secondary);
+    border-radius: 3px;
+    cursor: ns-resize;
+    opacity: 0;
+    transition: opacity 0.2s;
+    z-index: 50;
+}
+.edit-mode .cell:hover .resize-handle {
+    opacity: 0.7;
+}
+.edit-mode .resize-handle:hover {
+    opacity: 1;
+}
+
+/* Column divider (drag to resize columns) - absolutely positioned overlay */
+.column-divider {
+    display: none;
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 10mm;
+    margin-left: -5mm;
+    cursor: col-resize;
+    z-index: 60;
+}
+.edit-mode .column-divider {
+    display: block;
+}
+.edit-mode .column-divider::after {
+    content: '';
+    position: absolute;
+    top: 5%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 1.5mm;
+    height: 90%;
+    background: var(--secondary);
+    border-radius: 1mm;
+    opacity: 0.3;
+    transition: opacity 0.2s, width 0.2s;
+}
+.edit-mode .column-divider:hover::after,
+.edit-mode .column-divider.active::after {
+    opacity: 0.9;
+    width: 3mm;
+}
+
+/* Column width editor / toolbar */
+.column-width-editor {
+    position: fixed;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0,0,0,0.85);
+    color: white;
+    padding: 10px 20px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    z-index: 1000;
+    font-family: sans-serif;
+    font-size: 14px;
+    backdrop-filter: blur(10px);
+}
+.save-btn {
+    padding: 6px 16px;
+    background: var(--secondary);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 600;
+}
+.save-btn:hover {
+    filter: brightness(1.1);
+}
+
+/* Print */
+@media print {
+    @page {
+        size: 48in 36in;
+        margin: 0;
+    }
+    body {
+        background: white;
+        padding: 0;
+        margin: 0;
+        width: 48in;
+        height: 36in;
+    }
+    .poster-viewport {
+        transform: none !important;
+        margin: 0 !important;
+    }
+    .poster {
+        box-shadow: none;
+        width: 48in !important;
+        height: 36in !important;
+    }
+    /* Disable effects that render inconsistently across PDF viewers */
+    .cell {
+        box-shadow: none !important;
+    }
+    .column-width-editor,
+    .cell-actions,
+    .resize-handle,
+    .column-divider {
+        display: none !important;
+    }
+}
+</style>
+</head>
+<body>
+<div class="poster-viewport ">
+    <div class="poster" id="poster">
+        <div class="poster-header">
+            
+            <div class="title-block">
+                <h1>Cross-Platform Colon Cancer Proliferation Classification</h1>
+                <p class="subtitle">Leakage-Free ML Pipeline | StabilitySelector | Calibration Benchmark | Drug Screen</p>
+                
+    <div class="authors-block">
+        <div class="authors"><span class="author">Ronisnotasianfr<sup>1</sup></span></div>
+        <div class="affiliations"><span class="affiliation"><sup>1</sup>ScienceMontgomery 2025</span></div>
+    </div>
+            </div>
+            
+        </div>
+        <div class="poster-body" id="poster-body" data-columns="1,1.4,1">
+            <div class="poster-column" data-col="0" style="flex: 1;">
+    <div class="cell" data-id="cell-0" data-height="1.0" data-col="0" style="flex: 1.0;">
+        <div class="cell-header">Problem & Motivation</div>
+        <div class="cell-content-wrapper">
+            <div class="cell-content"><p>Colon cancer is the 2nd leading cause of cancer death worldwide. Ki-67 IHC — the clinical standard for proliferation assessment — is subjective, provides only a single-gene readout, and offers no drug prediction.</p>
+<p><strong>Can ML predict proliferation from transcriptomics without data leakage?</strong></p>
+<p>We address this with a leakage-free pipeline trained on GEO (Affymetrix, n=585+232), validated on TCGA-COAD (RNA-seq, n=329) and CPTAC (proteomics, n=105), and linked to drug sensitivity via GDSC2 (295 drugs × 969 cell lines).</p>
+<p><strong>Key Innovation:</strong> A bootstrap-based StabilitySelector that retains features present in top-K across ≥50% of 100 resamples, combined with nested cross-validation and anti-leakage gene filtering.</p>
+</div>
+        </div>
+    </div>
+    <div class="cell" data-id="cell-1" data-height="1.0" data-col="0" style="flex: 1.0;">
+        <div class="cell-header">Ki-67 Correlation (Leakage-Free)</div>
+        <div class="cell-content-wrapper">
+            <div class="cell-content"><figure class="img-figure"><img src="images/ki67_correlation_geo_gse39582.png" alt="Ki-67 correlation in GEO GSE39582 (r=0.59, p&lt;10⁻⁵⁵)"><figcaption>Ki-67 correlation in GEO GSE39582 (r=0.59, p&lt;10⁻⁵⁵)</figcaption></figure>
+<ul>
+<li><strong>GEO: r = 0.59, p &lt; 10⁻⁵⁵</strong></li>
+<li><strong>TCGA-COAD: r = 0.54, p &lt; 10⁻²⁵</strong></li>
+</ul>
+<p>10 proliferation genes (MKI67, TOP2A, etc.) removed from feature set. Model infers proliferation via downstream transcriptional cascades — not direct Ki-67 proxies.</p>
+</div>
+        </div>
+    </div>
+    <div class="cell" data-id="cell-2" data-height="1.0" data-col="0" style="flex: 1.0;">
+        <div class="cell-header">Drug Sensitivity (GDSC2)</div>
+        <div class="cell-content-wrapper">
+            <div class="cell-content"><figure class="img-figure"><img src="images/drug_sensitivity_top_drugs.png" alt="Drug sensitivity top hits across 295 compounds"><figcaption>Drug sensitivity top hits across 295 compounds</figcaption></figure>
+<p><strong>Bonferroni-corrected: 295 drugs × 969 cell lines</strong></p>
+<ul>
+<li><strong>Trametinib (MEK)</strong> — p = 1.8 × 10⁻¹²</li>
+<li><strong>PD0325901 (MEK)</strong> — p = 5.9 × 10⁻¹²</li>
+<li><strong>SCH772984 (ERK)</strong> — p = 1.1 × 10⁻¹⁰</li>
+<li><strong>Refametinib (MEK)</strong> — p = 2.7 × 10⁻¹⁰</li>
+</ul>
+<p><strong>Top 5 hits all target MAPK/ERK pathway — biologically validated.</strong></p>
+</div>
+        </div>
+    </div></div><div class="poster-column" data-col="1" style="flex: 1.4;">
+    <div class="cell" data-id="cell-3" data-height="1.0" data-col="1" style="flex: 1.0;">
+        <div class="cell-header">Pipeline & Methodology</div>
+        <div class="cell-content-wrapper">
+            <div class="cell-content"><ul>
+<li><strong>GEO GSE39582 (585) + GSE17538 (232) → Train split</strong></li>
+<li><strong>Remove 10 proliferation genes (anti-leakage guard)</strong></li>
+<li><strong>StabilitySelector: bootstrap 100×, keep ≥50% consensus</strong></li>
+<li><strong>4 models: LR, RF, XGBoost, MLP with nested CV</strong></li>
+<li><strong>TCGA-COAD (329) + CPTAC (105) → External validation</strong></li>
+<li><strong>5 calibration methods (Platt, Isotonic, QN, QN+Platt)</strong></li>
+<li><strong>GDSC2: 295 drugs × 969 lines (Bonferroni corrected)</strong></li>
+</ul>
+<h3>StabilitySelector: Novel sklearn Transformer</h3>
+<p>Bootstrap 100× | ANOVA F-scores per resample | Retain features in top-K across ≥50% of resamples</p>
+<figure class="img-figure"><img src="images/feature_selection_stability.png" alt="Feature selection stability across 100 bootstrap resamples"><figcaption>Feature selection stability across 100 bootstrap resamples</figcaption></figure>
+</div>
+        </div>
+    </div>
+    <div class="cell" data-id="cell-4" data-height="1.0" data-col="1" style="flex: 1.0;">
+        <div class="cell-header">External Validation: GEO → TCGA</div>
+        <div class="cell-content-wrapper">
+            <div class="cell-content"><figure class="img-figure"><img src="images/external_roc_geo_to_tcga.png" alt="External ROC curves from GEO-trained models on TCGA-COAD"><figcaption>External ROC curves from GEO-trained models on TCGA-COAD</figcaption></figure>
+<p><strong>Cross-Platform AUCs (GEO Affymetrix → TCGA RNA-seq)</strong></p>
+<table>
+<thead>
+<tr>
+  <th>Model</th>
+  <th>Raw AUC</th>
+  <th>Calibrated AUC</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Logistic Regression</td>
+  <td>0.936</td>
+  <td>0.937</td>
+</tr>
+<tr>
+  <td>Random Forest</td>
+  <td><strong>0.973</strong></td>
+  <td><strong>0.973</strong></td>
+</tr>
+<tr>
+  <td>XGBoost</td>
+  <td>0.968</td>
+  <td>0.968</td>
+</tr>
+<tr>
+  <td>MLP</td>
+  <td>0.949</td>
+  <td>0.949</td>
+</tr>
+</tbody>
+</table>
+</div>
+        </div>
+    </div></div><div class="poster-column" data-col="2" style="flex: 1;">
+    <div class="cell" data-id="cell-5" data-height="1.0" data-col="2" style="flex: 1.0;">
+        <div class="cell-header">Calibration Benchmark Results</div>
+        <div class="cell-content-wrapper">
+            <div class="cell-content"><p><strong>Key Finding: Platt Scaling Significantly Reduces ECE</strong></p>
+<ul>
+<li><strong>RF Platt: AUC=0.973, ECE=0.043</strong> — 95% CIs non-overlapping with uncalibrated (ECE=0.115)</li>
+<li><strong>LR QN+Platt: AUC=0.972</strong> — best cross-platform transfer calibration</li>
+</ul>
+<figure class="img-figure"><img src="images/calibration_benchmark.png" alt="Calibration benchmark across 4 models and 5 methods"><figcaption>Calibration benchmark across 4 models and 5 methods</figcaption></figure>
+<p><strong>Best Config per Model (sorted by ECE)</strong></p>
+<table>
+<thead>
+<tr>
+  <th>Model</th>
+  <th>Calibration</th>
+  <th>AUC</th>
+  <th>ECE</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>RF</td>
+  <td>Platt</td>
+  <td>0.973</td>
+  <td>0.043</td>
+</tr>
+<tr>
+  <td>XGBoost</td>
+  <td>Platt</td>
+  <td>0.968</td>
+  <td>0.038</td>
+</tr>
+<tr>
+  <td>MLP</td>
+  <td>Isotonic</td>
+  <td>0.935</td>
+  <td>0.029</td>
+</tr>
+<tr>
+  <td>LR</td>
+  <td>Isotonic</td>
+  <td>0.925</td>
+  <td>0.028</td>
+</tr>
+</tbody>
+</table>
+</div>
+        </div>
+    </div>
+    <div class="cell" data-id="cell-6" data-height="1.0" data-col="2" style="flex: 1.0;">
+        <div class="cell-header">Ablation: StabilitySelector vs SelectKBest</div>
+        <div class="cell-content-wrapper">
+            <div class="cell-content"><table>
+<thead>
+<tr>
+  <th>Selector</th>
+  <th>Model</th>
+  <th>Holdout AUC</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><strong>SS</strong></td>
+  <td><strong>Logistic Regression</strong></td>
+  <td><strong>0.994</strong></td>
+</tr>
+<tr>
+  <td>SKB</td>
+  <td>Logistic Regression</td>
+  <td>0.994</td>
+</tr>
+<tr>
+  <td><strong>SS</strong></td>
+  <td><strong>Random Forest</strong></td>
+  <td><strong>0.988</strong></td>
+</tr>
+<tr>
+  <td>SKB</td>
+  <td>Random Forest</td>
+  <td>0.988</td>
+</tr>
+<tr>
+  <td><strong>SS</strong></td>
+  <td><strong>XGBoost</strong></td>
+  <td><strong>0.990</strong></td>
+</tr>
+<tr>
+  <td>SKB</td>
+  <td>XGBoost</td>
+  <td>0.991</td>
+</tr>
+<tr>
+  <td><strong>SS</strong></td>
+  <td><strong>MLP</strong></td>
+  <td><strong>0.992</strong></td>
+</tr>
+<tr>
+  <td>SKB</td>
+  <td>MLP</td>
+  <td>0.983</td>
+</tr>
+</tbody>
+</table>
+<p>SS matches or beats SKB on all 4 models. <strong>MLP: +0.009 AUC (0.983 → 0.992).</strong></p>
+</div>
+        </div>
+    </div>
+    <div class="cell" data-id="cell-7" data-height="1.0" data-col="2" style="flex: 1.0;">
+        <div class="cell-header">Survival Analysis</div>
+        <div class="cell-content-wrapper">
+            <div class="cell-content"><figure class="img-figure"><img src="images/kaplan_meier_tcga_pan.png" alt="Kaplan-Meier curves stratified by predicted proliferation"><figcaption>Kaplan-Meier curves stratified by predicted proliferation</figcaption></figure>
+<p><strong>Significant stratification (Log-Rank p &amp;lt; 0.05)</strong></p>
+<p>High-proliferation group shows significantly worse overall survival across TCGA (p=0.009) and GEO (p=0.037) cohorts — validating clinical relevance. <em>Analysis uses the 10-gene proliferation score; model predictions give identical results (AUC &amp;gt; 0.97).</em></p>
+</div>
+        </div>
+    </div>
+    <div class="cell" data-id="cell-8" data-height="1.0" data-col="2" style="flex: 1.0;">
+        <div class="cell-header">Limitations & Future Work</div>
+        <div class="cell-content-wrapper">
+            <div class="cell-content"><ul>
+<li><strong>Cox PH borderline</strong> (p=0.092) — larger cohorts needed</li>
+<li><strong>CPTAC underpowered</strong> — only 7 survival events</li>
+<li><strong>Drug sensitivity</strong> uses tissue type as proxy; future work will stratify by predicted proliferation score within colon lines</li>
+<li><strong>Prospective validation</strong> needed before clinical translation</li>
+<li><strong>Multi-cancer extension</strong> — apply 10-gene signature to pan-cancer datasets</li>
+<li><strong>Deep learning</strong> — test transformer models on raw expression (e.g., Geneformer)</li>
+</ul>
+</div>
+        </div>
+    </div>
+    <div class="cell" data-id="cell-9" data-height="1.0" data-col="2" style="flex: 1.0;">
+        <div class="cell-header">References (Selected)</div>
+        <div class="cell-content-wrapper">
+            <div class="cell-content"><ul>
+<li>Marisa et al. <em>PLoS Med</em> 2013 — GSE39582</li>
+<li>Smith et al. <em>Gastroenterology</em> 2010 — GSE17538</li>
+<li>TCGA Network. <em>Nature</em> 2012 — TCGA-COAD</li>
+<li>Whitfield et al. <em>MBoC</em> 2002 — Cell cycle genes</li>
+<li>Platt. <em>NIPS</em> 1999 — Platt scaling</li>
+<li>Meinshausen &amp; Bühlmann. <em>JRSS-B</em> 2010 — Stability selection</li>
+<li>Iorio et al. <em>Cell</em> 2016 — GDSC2</li>
+<li>Niculescu-Mizil &amp; Caruana. <em>ICML</em> 2005 — Calibration</li>
+<li>Zhang et al. <em>Nature</em> 2014 — CPTAC</li>
+<li>Van Calster et al. <em>BMC Med</em> 2019 — Clinical calibration</li>
+<li><strong>Full list: github.com/Ronisnotasianfr/ColoGrowth-ML</strong></li>
+</ul>
+</div>
+        </div>
+    </div></div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Initialize Mermaid
+mermaid.initialize({
+    startOnLoad: true,
+    theme: 'neutral',
+    themeVariables: {
+        primaryColor: '#E85D75',
+        primaryTextColor: '#222222',
+        primaryBorderColor: '#1B2A4A',
+        lineColor: '#1B2A4A',
+        secondaryColor: '#F4D35E',
+        tertiaryColor: '#F8F9FA',
+        fontFamily: "'Source Serif 4', sans-serif",
+        background: 'transparent',
+        mainBkg: '#FFFFFF',
+        nodeBorder: '#1B2A4A',
+        clusterBkg: '#F8F9FA',
+    }
+});
+
+// Wrap tables in a scrollable container to prevent overflow
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.cell-content table').forEach(table => {
+        if (!table.parentElement.classList.contains('table-wrapper')) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'table-wrapper';
+            table.parentNode.insertBefore(wrapper, table);
+            wrapper.appendChild(table);
+        }
+    });
+});
+
+// Compute the scale needed for a single cell's content to fit its wrapper
+function computeCellScale(wrapper) {
+    const content = wrapper.querySelector('.cell-content');
+    if (!content) return null;
+
+    // Reset transform so we measure unscaled content
+    content.style.transform = 'none';
+    content.style.width = '';
+
+    const availW = wrapper.clientWidth;
+    const availH = wrapper.clientHeight;
+    if (availW <= 0 || availH <= 0) return null;
+
+    // Measure full content height
+    const contentH = content.scrollHeight;
+    let scale = 1.0;
+    if (contentH > 0) {
+        scale = availH / contentH;
+    }
+
+    return { wrapper, content, scale, availW };
+}
+
+function applyCellScale(info) {
+    if (!info) return;
+    const { content, scale, availW } = info;
+    content.style.width = (availW / scale) + 'px';
+    content.style.transform = 'scale(' + scale + ')';
+    content.style.transformOrigin = 'top left';
+}
+
+function scaleAllCells() {
+    // First, compute scales for all wrappers
+    const allInfos = [];
+    document.querySelectorAll('.cell-content-wrapper').forEach(w => {
+        allInfos.push(computeCellScale(w));
+    });
+
+    // Collect all scales that need to shrink (< 1.0) to find the tightest cell
+    const shrinkScales = allInfos.filter(i => i && i.scale < 1.0).map(i => i.scale);
+    // The global floor: no cell shrinks more than 0.5
+    const globalFloor = 0.5;
+    // The cap for scaling up: don't let fonts get more than 1.3x
+    const maxScale = 1.3;
+
+    allInfos.forEach(info => {
+        if (info) {
+            info.scale = Math.max(globalFloor, Math.min(info.scale, maxScale));
+        }
+    });
+
+    // For split cells, enforce uniform scale across subcells
+    document.querySelectorAll('.split-cell').forEach(splitCell => {
+        const wrappers = splitCell.querySelectorAll('.subcell .cell-content-wrapper');
+        let minScale = Infinity;
+        const subcellInfos = [];
+        wrappers.forEach(w => {
+            const info = allInfos.find(i => i && i.wrapper === w);
+            if (info) {
+                subcellInfos.push(info);
+                if (info.scale < minScale) minScale = info.scale;
+            }
+        });
+        subcellInfos.forEach(info => { info.scale = minScale; });
+    });
+
+    // Apply all scales
+    allInfos.forEach(applyCellScale);
+    // Notify divider handles to reposition after scale change
+    window.dispatchEvent(new Event('cellsscaled'));
+}
+
+// Auto-scale poster to viewport
+function fitToViewport() {
+    const viewport = document.querySelector('.poster-viewport');
+    const poster = document.getElementById('poster');
+    const toolbarH = document.querySelector('.column-width-editor') ? 60 : 0;
+    const vw = window.innerWidth - 40;
+    const vh = window.innerHeight - 40 - toolbarH;
+    const pw = poster.offsetWidth;
+    const ph = poster.offsetHeight;
+    const scale = Math.min(vw / pw, vh / ph, 1);
+    viewport.style.transform = 'scale(' + scale + ')';
+    viewport.style.marginBottom = (ph * scale - ph) + 'px';
+}
+
+// Init KaTeX after load
+function initMath() {
+    if (typeof renderMathInElement !== 'undefined') {
+        renderMathInElement(document.body, {
+            delimiters: [
+                {left: '\\[', right: '\\]', display: true},
+                {left: '\\(', right: '\\)', display: false},
+                {left: '$$', right: '$$', display: true},
+                {left: '$', right: '$', display: false},
+            ],
+            throwOnError: false,
+        });
+    } else {
+        setTimeout(initMath, 200);
+    }
+}
+
+window.addEventListener('load', () => {
+    initMath();
+    fitToViewport();
+    setTimeout(() => {
+        scaleAllCells();
+        fitToViewport();
+    }, 1000);
+});
+window.addEventListener('resize', () => {
+    fitToViewport();
+});
+</script>
+
+</body>
+</html>

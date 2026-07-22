@@ -10,18 +10,20 @@ Systematic comparison of 5 calibration methods x 4 model classes for leakage-fre
 
 ## Key Results
 
-| Model | Best Calibration | TCGA AUC | TCGA Acc | TCGA ECE |
-|-------|-----------------|----------|----------|----------|
-| Random Forest | None | 0.973 | 0.915 | 0.032 |
-| Logistic Regression | QN+Platt | 0.972 | 0.903 | 0.041 |
-| XGBoost | None | 0.968 | 0.909 | 0.038 |
-| MLP | QN+Platt | 0.961 | 0.888 | 0.052 |
+| Model | Best Config | TCGA AUC | TCGA Acc | TCGA ECE |
+|-------|-------------|----------|----------|----------|
+| Random Forest | Platt Scaling | 0.973 | 0.921 | **0.043** |
+| XGBoost | Platt Scaling | 0.968 | 0.903 | **0.038** |
+| Logistic Regression | No Calibration | 0.936 | 0.855 | 0.082 |
+| Neural Network (MLP) | Isotonic Regression | 0.935 | 0.848 | **0.029** |
 
-Finding: Tree-based models output well-calibrated probabilities without post-hoc correction (ECE < 0.04). Logistic Regression benefits from quantile normalization + Platt scaling for cross-platform transfer.
+Finding: **Platt Scaling consistently reduces ECE** for tree-based models — RF ECE drops from 0.115 to 0.043 (95% CIs non-overlapping, p<0.05). MLP benefits most from Isotonic Regression (ECE=0.029). See [calibration benchmark](results/calibration_benchmark.csv) for full 5×4 results with bootstrap CIs.
 
-**Drug sensitivity** (GDSC2): 5/5 top hits MAPK/ERK pathway inhibitors, all survive Bonferroni correction (α/295 = 1.69e-4). Consistent with KRAS/BRAF dependence in colorectal cancer.
+**Best AUC across all configs:** LR + QN+Platt (0.972), but with high ECE (0.301) — a tradeoff worth noting.
 
-**Survival**: TCGA PanCancer log-rank p=0.009. GEO GSE39582 p=0.037.
+**Drug sensitivity** (GDSC2): 5/5 top hits MAPK/ERK pathway inhibitors — Trametinib (p=1.8e-12), PD0325901 (p=5.9e-12), SCH772984 (p=1.1e-10), Refametinib (p=2.7e-10), Selumetinib (p=3.2e-10). All survive Bonferroni (α/295=1.69e-4). Consistent with KRAS/BRAF dependence in CRC [Fang & Richardson, 2005].
+
+**Survival**: High-proliferation patients show worse OS across cohorts (TCGA PanCancer log-rank p=0.009; GEO GSE39582 p=0.037), validating clinical relevance.
 
 ---
 
