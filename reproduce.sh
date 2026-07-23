@@ -26,8 +26,8 @@ python -m src.evaluate --dataset geo_pan
 # 7. Cross-platform external validation (GEO -> TCGA)
 python -m src.external_validation --train-dataset geo_pan --test-dataset tcga
 
-# 8. Calibration benchmark (4 methods x 4 models)
-python -m src.calibration_benchmark --train-dataset geo --test-dataset tcga
+# 8. Calibration benchmark (4 methods x 4 models) using pan datasets
+python -m src.calibration_benchmark --train-dataset geo_pan --test-dataset tcga_pan
 
 # 9. Survival analysis (Kaplan-Meier, log-rank)
 python -m src.survival
@@ -48,8 +48,14 @@ python src/drug_sensitivity.py --drugs 20
 python paper/build_paper.py --dataset geo_pan
 python paper/build_pdf.py --dataset geo_pan
 
+# 15. Synthetic ground-truth validation
+python -m src.synthetic_validation
+
 echo ""
 echo "=== ALL PIPELINE STEPS COMPLETE ==="
 echo "Results in: results/"
 echo "Paper in:   paper/"
 echo "Models in:  models/"
+echo ""
+echo "Docker: docker compose up --build"
+echo "Outputs are mounted at ./data, ./models, ./results, ./paper"

@@ -1,0 +1,10 @@
+version: "3.9"
+services:
+  cologrowth:
+    build: .
+    volumes:
+      - ./data:/app/data
+      - ./models:/app/models
+      - ./results:/app/results
+      - ./paper:/app/paper
+    command: bash reproduce.sh

@@ -49,6 +49,10 @@ from paper_metrics import (
     build_cox_paragraph,
     build_sensitivity_p1,
     build_discussion_benchmarking_intro,
+    build_system_architecture_text,
+    build_synthetic_validation_text,
+    build_synthetic_validation_table,
+    build_reproducibility_text,
 )
 
 TITLE = "Cross-Platform Colon Cancer Proliferation Classification via Leakage-Free ML"
@@ -313,6 +317,12 @@ def add_methods(doc, stats):
     set_table_borders(hp_table)
     add_caption(doc, "Table 2. Hyperparameter optimization search ranges and selected settings.")
 
+    # 2.1 System Architecture
+    add_heading(doc, "2.1 System Architecture and Pipeline Design", 2)
+    add_para(doc, build_system_architecture_text(), size=10.4)
+
+    add_para(doc, build_reproducibility_text(), size=10.4)
+
 
 def add_results(doc, metrics, results_dir):
     add_heading(doc, "3. Results", 1)
@@ -479,8 +489,27 @@ def add_sensitivity_section(doc):
     add_caption(doc, "Table 8. Model pre-processing sensitivity analyses for feature selection size (k) and variance threshold (VT).")
 
 
+def add_synthetic_validation(doc):
+    add_heading(doc, "7. Synthetic Ground-Truth Validation", 1)
+    add_para(doc, build_synthetic_validation_text(), size=10.4)
+
+    synth_tab = doc.add_table(rows=1, cols=7)
+    synth_tab.alignment = WD_TABLE_ALIGNMENT.CENTER
+    headers = ["Model", "AUC", "Accuracy", "Selected", "TP/Total", "Precision", "Enrichment"]
+    for cell, text in zip(synth_tab.rows[0].cells, headers):
+        set_cell_shading(cell, LIGHT_FILL)
+        set_cell_text(cell, text, bold=True, size=8.2, color=INK)
+    set_repeat_table_header(synth_tab.rows[0])
+    for row in build_synthetic_validation_table():
+        cells = synth_tab.add_row().cells
+        for c, text in zip(cells, row):
+            set_cell_text(c, text, size=8.0)
+    set_table_borders(synth_tab)
+    add_caption(doc, "Table 9. Synthetic ground-truth validation: feature recovery rates across model classes.")
+
+
 def add_discussion(doc):
-    add_heading(doc, "7. Discussion", 1)
+    add_heading(doc, "8. Discussion", 1)
     add_para(doc, build_discussion_paragraph(), size=10.4)
 
     # Task 3.1 - Benchmarking Table
@@ -497,20 +526,23 @@ def add_discussion(doc):
         for c, text in zip(cells, row):
             set_cell_text(c, text, size=8.0)
     set_table_borders(bench_tab)
-    add_caption(doc, "Table 9. Performance and methodological comparisons with published signatures.")
+    add_caption(doc, "Table 10. Performance and methodological comparisons with published signatures.")
 
     # Task 3.4 - Biological Mechanism Discussion Expansion
     add_para(doc, build_discussion_pathway_expansion(), size=10.4)
 
-    add_heading(doc, "8. Limitations and Future Directions", 1)
+    add_heading(doc, "9. Limitations and Future Directions", 1)
     
     add_para(doc, "LIMITATIONS:", size=10.4, bold=True)
     limitations = [
-        "Sample size: GEO GSE39582 (n=585) is moderate. CPTAC-COAD (n=105) has only 7 survival events, limiting power.",
-        "Target binarization at the median is standard but arbitrary. Continuous risk scores might work better.",
-        "The median-split proliferation classes barely overlap (Cohen's d = 2.3), making binary separation easier than typical clinical ML tasks.",
-        "Microarray and RNA-seq have different dynamic ranges, requiring post-hoc calibration to restore accuracy.",
-        "SHAP scores reflect correlation, not causation."
+        "Sample size: GEO GSE39582 (n=585) is moderate. CPTAC-COAD (n=105) has only 7 survival events, substantially limiting statistical power for survival analysis on that cohort.",
+        "Target binarization at the median is standard but arbitrary. Continuous risk scores would preserve more information.",
+        "Proliferation classes barely overlap (Cohen's d = 2.3), making binary separation easier than typical clinical ML tasks. The model's AUC >0.97 should be interpreted in this context.",
+        "Cox regression showed proliferation class was not an independent predictor after adjusting for stage. This limits the clinical utility of the prognostic claim.",
+        "Microarray and RNA-seq platforms have different dynamic ranges, requiring post-hoc Platt calibration for cross-platform probability calibration.",
+        "The drug screen uses GDSC2 cell line data and does not account for tissue-specific expression differences across cell lines.",
+        "SHAP scores reflect correlation, not causation. Top features should not be interpreted as therapeutic targets without experimental validation.",
+        "Only 20% of the data was held out for final evaluation. A larger holdout would give more stable performance estimates."
     ]
     for lim in limitations:
         p = doc.add_paragraph(style="List Bullet")
@@ -520,9 +552,11 @@ def add_discussion(doc):
         
     add_para(doc, "FUTURE WORK:", size=10.4, bold=True)
     future = [
-        "Prospective validation of the Top-3 Ensemble on new COAD biopsy cohorts.",
-        "qPCR knockdown of top SHAP genes (RPS3, RPS11) to confirm their role in growth regulation.",
-        "Integration of CNVs and somatic mutation data into the feature space."
+        "Prospective validation on new COAD biopsy cohorts with matched RNA-seq and Ki-67 IHC.",
+        "qPCR knockdown of top SHAP genes (RPS3, RPS11, MCM10) to distinguish correlation from causation.",
+        "Continuous risk score modeling (instead of binarized proliferation class) for survival analysis.",
+        "Integration of CNVs, somatic mutations, and methylation data into the feature space.",
+        "Submission of the trained pipelines as a web API for independent validation by other labs."
     ]
     for fut in future:
         p = doc.add_paragraph(style="List Bullet")
@@ -646,6 +680,15 @@ def build_latex(metrics, stats, out_path):
     for row in build_benchmarking_table():
         bench_rows.append(f"  {row[0]} & {row[1]} & {row[2]} & {row[3]} & {row[4]} & {row[5]} & {row[6]} \\\\")
     bench_content = "\n".join(bench_rows)
+    # Table 10 in the updated numbering
+
+    synth_text = build_synthetic_validation_text()
+    synth_rows = []
+    for row in build_synthetic_validation_table():
+        synth_rows.append(f"  {row[0]} & {row[1]} & {row[2]} & {row[3]} & {row[4]} & {row[5]} & {row[6]} \\\\")
+    synth_content = "\n".join(synth_rows)
+    arch_text = build_system_architecture_text()
+    repro_text = build_reproducibility_text()
 
     tex_content = f"""\\documentclass[11pt]{{article}}
 \\usepackage[margin=0.8in]{{geometry}}
@@ -720,6 +763,11 @@ External validation & CPTAC-COAD (n=105) & 50\\% Platt calibration + 50\\% evalu
 \\bottomrule
 \\end{{tabular}}
 \\end{{table}}
+
+\\subsection*{{System Architecture and Pipeline Design}}
+{arch_text}
+
+{repro_text}
 
 \\section{{Results}}
 {results_opening}
@@ -847,6 +895,21 @@ Sensitivity analyses varied feature selection count (k) and variance threshold (
 \\end{{tabular}}
 \\end{{table}}
 
+\\section{{Synthetic Ground-Truth Validation}}
+{synth_text}
+
+\\begin{{table}}[H]
+\\centering
+\\caption{{Synthetic ground-truth validation: feature recovery rates across model classes.}}
+\\begin{{tabular}}{{lllllll}}
+\\toprule
+\\textbf{{Model}} & \\textbf{{AUC}} & \\textbf{{Accuracy}} & \\textbf{{Selected}} & \\textbf{{TP/Total}} & \\textbf{{Precision}} & \\textbf{{Enrichment}} \\\\
+\\midrule
+{synth_content}
+\\bottomrule
+\\end{{tabular}}
+\\end{{table}}
+
 \\section{{Discussion}}
 {discussion}
 
@@ -867,18 +930,22 @@ Sensitivity analyses varied feature selection count (k) and variance threshold (
 \\section{{Limitations and Future Directions}}
 \\subsection*{{Limitations}}
 \\begin{{itemize}}
-    \\item Sample size: GEO GSE39582 (n=585) is moderate. CPTAC-COAD (n=105) has only 7 survival events.
-    \\item Binarizing proliferation scores at the median is standard but arbitrary.
-    \\item The median-split proliferation classes barely overlap (Cohen's d = 2.3), making binary separation easier than typical clinical ML tasks.
-    \\item Microarray and RNA-seq have different dynamic ranges, requiring post-hoc calibration.
-    \\item SHAP scores reflect correlation, not causation.
+    \\item Sample size: GEO GSE39582 (n=585) is moderate. CPTAC-COAD (n=105) has only 7 survival events, substantially limiting statistical power.
+    \\item Target binarization at the median is standard but arbitrary. Continuous risk scores would preserve more information.
+    \\item Proliferation classes barely overlap (Cohen's d = 2.3), making binary separation easier than typical clinical ML tasks. AUC >0.97 should be interpreted in this context.
+    \\item Cox regression showed proliferation was not an independent predictor after adjusting for stage.
+    \\item Microarray and RNA-seq require post-hoc Platt calibration due to different dynamic ranges.
+    \\item Drug screen uses GDSC2 cell line data and does not account for tissue-specific expression differences.
+    \\item SHAP scores reflect correlation, not causation. Top features should not be interpreted as therapeutic targets without experimental validation.
 \\end{{itemize}}
 
 \\subsection*{{Future Work}}
 \\begin{{itemize}}
-    \\item Prospective validation of the Top-3 Ensemble on new COAD biopsy cohorts.
-    \\item qPCR knockdown of top SHAP genes (RPS3, RPS11) to test their role in growth regulation.
-    \\item Integration of CNVs and somatic mutation data into the feature space.
+    \\item Prospective validation on new COAD biopsy cohorts with matched RNA-seq and Ki-67 IHC.
+    \\item qPCR knockdown of top SHAP genes (RPS3, RPS11, MCM10) to distinguish correlation from causation.
+    \\item Continuous risk score modeling instead of binarized proliferation class.
+    \\item Integration of CNVs, somatic mutations, and methylation data.
+    \\item Submission of trained pipelines as a web API for independent validation.
 \\end{{itemize}}
 
 \\section{{References}}
@@ -947,6 +1014,8 @@ def main():
     add_clinical_validation(doc, results_dir)
     add_page_break(doc)
     add_sensitivity_section(doc)
+    add_page_break(doc)
+    add_synthetic_validation(doc)
     add_page_break(doc)
     add_discussion(doc)
     add_page_break(doc)

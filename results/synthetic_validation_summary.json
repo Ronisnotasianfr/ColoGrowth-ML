@@ -1,0 +1,11 @@
+{
+  "n_genes": 2000,
+  "n_samples": 300,
+  "n_signal": 20,
+  "signal_strength": 1.5,
+  "best_model": "Random Forest",
+  "best_auc": 0.9877777777777779,
+  "avg_precision": 0.0766,
+  "avg_recall": 1.0,
+  "avg_enrichment": 7.66
+}
