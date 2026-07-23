@@ -198,61 +198,66 @@ def run_correlation(mki67, y_prob, scores, label):
     return result
 
 
-print("=" * 60)
-print("Ki-67 / MKI67 Correlation Analysis")
-print("=" * 60)
+def main():
+    print("=" * 60)
+    print("Ki-67 / MKI67 Correlation Analysis")
+    print("=" * 60)
 
-MODEL_PATH = os.path.join(MODELS_DIR, "random_forest_geo.joblib")
-X_geo_ref = pd.read_csv(os.path.join(DATA_DIR, "geo_X_features.csv"), index_col=0)
-results = []
+    MODEL_PATH = os.path.join(MODELS_DIR, "random_forest_geo.joblib")
+    X_geo_ref = pd.read_csv(os.path.join(DATA_DIR, "geo_X_features.csv"), index_col=0)
+    results = []
 
-# ============================================================
-# GEO (training cohort)
-# ============================================================
-print("\n--- GEO GSE39582 ---")
-geo_mki67 = load_geo_mki67()
-if geo_mki67 is not None:
-    geo_probs = get_predictions(MODEL_PATH, X_geo_ref, "geo")
-    geo_scores = pd.read_csv(os.path.join(DATA_DIR, "geo_proliferation_scores.csv"), index_col=0)["score"]
-    if geo_probs is not None:
-        r = run_correlation(geo_mki67, geo_probs, geo_scores, "GEO GSE39582")
-        if r: results.append(r)
+    # ============================================================
+    # GEO (training cohort)
+    # ============================================================
+    print("\n--- GEO GSE39582 ---")
+    geo_mki67 = load_geo_mki67()
+    if geo_mki67 is not None:
+        geo_probs = get_predictions(MODEL_PATH, X_geo_ref, "geo")
+        geo_scores = pd.read_csv(os.path.join(DATA_DIR, "geo_proliferation_scores.csv"), index_col=0)["score"]
+        if geo_probs is not None:
+            r = run_correlation(geo_mki67, geo_probs, geo_scores, "GEO GSE39582")
+            if r: results.append(r)
 
-# ============================================================
-# TCGA-COAD (external validation)
-# ============================================================
-print("\n--- TCGA-COAD ---")
-tcga_mki67 = load_tcga_mki67()
-if tcga_mki67 is not None:
-    X_tcga = pd.read_csv(os.path.join(DATA_DIR, "tcga_X_features.csv"), index_col=0)
-    X_tcga_aligned = align_features(X_geo_ref, X_tcga)
-    tcga_probs = get_predictions(MODEL_PATH, X_tcga_aligned, "tcga")
-    tcga_scores = pd.read_csv(os.path.join(DATA_DIR, "tcga_proliferation_scores.csv"), index_col=0)["score"]
-    if tcga_probs is not None:
-        r = run_correlation(tcga_mki67, tcga_probs, tcga_scores, "TCGA-COAD")
-        if r: results.append(r)
+    # ============================================================
+    # TCGA-COAD (external validation)
+    # ============================================================
+    print("\n--- TCGA-COAD ---")
+    tcga_mki67 = load_tcga_mki67()
+    if tcga_mki67 is not None:
+        X_tcga = pd.read_csv(os.path.join(DATA_DIR, "tcga_X_features.csv"), index_col=0)
+        X_tcga_aligned = align_features(X_geo_ref, X_tcga)
+        tcga_probs = get_predictions(MODEL_PATH, X_tcga_aligned, "tcga")
+        tcga_scores = pd.read_csv(os.path.join(DATA_DIR, "tcga_proliferation_scores.csv"), index_col=0)["score"]
+        if tcga_probs is not None:
+            r = run_correlation(tcga_mki67, tcga_probs, tcga_scores, "TCGA-COAD")
+            if r: results.append(r)
 
-# ============================================================
-# CPTAC-COAD (third cohort)
-# ============================================================
-print("\n--- CPTAC-COAD ---")
-cptac_mki67 = load_cptac_mki67()
-if cptac_mki67 is not None:
-    X_cptac = pd.read_csv(os.path.join(DATA_DIR, "cptac_X_features.csv"), index_col=0)
-    X_cptac_aligned = align_features(X_geo_ref, X_cptac)
-    cptac_probs = get_predictions(MODEL_PATH, X_cptac_aligned, "cptac")
-    cptac_scores = pd.read_csv(os.path.join(DATA_DIR, "cptac_proliferation_scores.csv"), index_col=0)["score"]
-    if cptac_probs is not None:
-        r = run_correlation(cptac_mki67, cptac_probs, cptac_scores, "CPTAC-COAD")
-        if r: results.append(r)
+    # ============================================================
+    # CPTAC-COAD (third cohort)
+    # ============================================================
+    print("\n--- CPTAC-COAD ---")
+    cptac_mki67 = load_cptac_mki67()
+    if cptac_mki67 is not None:
+        X_cptac = pd.read_csv(os.path.join(DATA_DIR, "cptac_X_features.csv"), index_col=0)
+        X_cptac_aligned = align_features(X_geo_ref, X_cptac)
+        cptac_probs = get_predictions(MODEL_PATH, X_cptac_aligned, "cptac")
+        cptac_scores = pd.read_csv(os.path.join(DATA_DIR, "cptac_proliferation_scores.csv"), index_col=0)["score"]
+        if cptac_probs is not None:
+            r = run_correlation(cptac_mki67, cptac_probs, cptac_scores, "CPTAC-COAD")
+            if r: results.append(r)
 
-# ============================================================
-# Summary
-# ============================================================
-print("\n" + "=" * 60)
-print("SUMMARY TABLE")
-print("=" * 60)
-df = pd.DataFrame(results)
-print(df.to_string(index=False))
-df.to_csv(os.path.join(RESULTS_DIR, "ki67_correlation_summary.csv"), index=False)
-print(f"\nSaved: results/ki67_correlation_summary.csv")
+    # ============================================================
+    # Summary
+    # ============================================================
+    print("\n" + "=" * 60)
+    print("SUMMARY TABLE")
+    print("=" * 60)
+    df = pd.DataFrame(results)
+    print(df.to_string(index=False))
+    df.to_csv(os.path.join(RESULTS_DIR, "ki67_correlation_summary.csv"), index=False)
+    print(f"\nSaved: results/ki67_correlation_summary.csv")
+
+
+if __name__ == "__main__":
+    main()

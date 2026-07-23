@@ -267,8 +267,6 @@ def map_probes_to_genes(expr_df, probe_mapping):
     expr_mapped.columns = [g for g, v in zip(gene_names, valid_mask) if v]
 
     # Collapse duplicate genes by taking the mean
-    expr_gene = expr_mapped.T.groupby(expr_mapped.columns[valid_mask.count(True) - sum(valid_mask):]).mean().T
-    # Simpler approach: transpose, groupby columns, mean, transpose back
     expr_gene = expr_mapped.groupby(expr_mapped.columns, axis=1).mean()
 
     print(f"[PROBE MAP] {expr_df.shape[1]} probes -> {expr_gene.shape[1]} unique genes")

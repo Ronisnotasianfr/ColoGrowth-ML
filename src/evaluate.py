@@ -153,7 +153,7 @@ def main():
         "--dataset",
         type=str,
         default="synthetic",
-        choices=["geo", "tcga", "synthetic"],
+        choices=["geo", "geo17538", "geo_pan", "tcga", "tcga_read", "tcga_pan", "synthetic"],
         help="Dataset used during training",
     )
     parser.add_argument("--data-dir", type=str, default="data/processed")

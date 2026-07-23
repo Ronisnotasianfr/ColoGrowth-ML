@@ -154,7 +154,7 @@ def main():
     plt.style.use('seaborn-v0_8-whitegrid')
     fig, axes = plt.subplots(1, 3, figsize=(18, 5.5))
     fig.patch.set_facecolor('white')
-    COLORS = {'None': '#2B3A67', 'Platt Scaling': '#E85D75',
+    COLORS = {'QN-Only': '#2B3A67', 'Platt Scaling': '#E85D75',
               'Isotonic Regression': '#F4D35E'}
 
     for name in MODEL_NAMES:
@@ -177,7 +177,7 @@ def main():
             brier_mean, brier_lo, brier_hi = bootstrap_brier(y_eval.values, prob_calibrated, n_jobs=args.n_jobs)
             ece_mean, ece_lo, ece_hi = bootstrap_ece(y_eval.values, prob_calibrated, n_jobs=args.n_jobs)
             all_rows.append({
-                'Model': name, 'Calibration': 'No Calibration' if method_name == 'None' else method_name,
+                'Model': name, 'Calibration': 'QN-Only' if method_name == 'None' else method_name,
                 'AUC': metrics['AUC'], 'Accuracy': metrics['Accuracy'],
                 'Brier': metrics['Brier'],
                 'ECE': metrics['ECE'],
@@ -190,14 +190,14 @@ def main():
         if ax_idx < 3:
             ax = axes[ax_idx]
             ax.plot([0, 1], [0, 1], '--', color='#999999', linewidth=1.5, label='Perfect')
-            for method_name in ['No Calibration', 'Platt Scaling', 'Isotonic Regression']:
-                if method_name == 'No Calibration':
+            for method_name in ['QN-Only', 'Platt Scaling', 'Isotonic Regression']:
+                if method_name == 'QN-Only':
                     prob = prob_eval_raw
                 else:
                     fn = CAL_METHODS[method_name]
                     prob = fn(y_cal.values, prob_cal_raw, prob_eval_raw)
                 p_true, p_pred = calibration_curve(y_eval, prob, n_bins=10)
-                c = '#2B3A67' if method_name == 'No Calibration' else COLORS.get(method_name, '#999999')
+                c = '#2B3A67' if method_name == 'QN-Only' else COLORS.get(method_name, '#999999')
                 ax.plot(p_pred, p_true, 'o-', color=c, linewidth=2,
                         markersize=6, label=method_name)
             ax.set_title(name, fontsize=12, fontweight='bold', color='#2B3A67')
@@ -227,25 +227,6 @@ def main():
         ece_mean, ece_lo, ece_hi = bootstrap_ece(y_eval.values, prob_qp, n_jobs=args.n_jobs)
         all_rows.append({
             'Model': name, 'Calibration': 'QN+Platt',
-            'AUC': metrics['AUC'], 'Accuracy': metrics['Accuracy'],
-            'Brier': metrics['Brier'], 'ECE': metrics['ECE'],
-            'Brier_95CI_Lower': brier_lo, 'Brier_95CI_Upper': brier_hi,
-            'ECE_95CI_Lower': ece_lo, 'ECE_95CI_Upper': ece_hi,
-        })
-
-    # Also add QN-only (no Platt)
-    for name in MODEL_NAMES:
-        slug = model_type_slug(name)
-        model_path = os.path.join(args.models_dir, f'{slug}_{args.train_dataset}.joblib')
-        if not os.path.exists(model_path):
-            continue
-        pipeline = joblib.load(model_path)
-        prob_qn = pipeline.predict_proba(X_eval)[:, 1]
-        metrics = evaluate(y_eval, prob_qn)
-        brier_mean, brier_lo, brier_hi = bootstrap_brier(y_eval.values, prob_qn, n_jobs=args.n_jobs)
-        ece_mean, ece_lo, ece_hi = bootstrap_ece(y_eval.values, prob_qn, n_jobs=args.n_jobs)
-        all_rows.append({
-            'Model': name, 'Calibration': 'QN Only',
             'AUC': metrics['AUC'], 'Accuracy': metrics['Accuracy'],
             'Brier': metrics['Brier'], 'ECE': metrics['ECE'],
             'Brier_95CI_Lower': brier_lo, 'Brier_95CI_Upper': brier_hi,

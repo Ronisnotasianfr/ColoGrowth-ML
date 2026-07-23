@@ -2,6 +2,7 @@ import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 import numpy as np
 import pandas as pd
+import pytest
 from src.preprocess import PROLIF_GENES, remove_proliferation_genes, validate_no_leakage
 
 
