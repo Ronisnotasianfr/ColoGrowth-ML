@@ -535,26 +535,25 @@ def build_methods_split_justification() -> str:
 
 def build_discussion_pathway_expansion() -> str:
     return (
-        "Top features MCM10, SPC25, NCAPH, and RFC4 are downstream of cell-cycle entry. "
-        "MCM10 supports DNA replication via CMG helicase complex isomerization "
-        "(Langston et al., 2017). RFC4 recruits DNA polymerase delta to repair sites (Overmeer et al., 2010). "
-        "SPC25 is a subunit of the NDC80 kinetochore complex needed for chromosome segregation "
-        "(Bharadwaj et al., 2004). NCAPH is involved in condensin I assembly for chromosome condensation "
-        "in proliferating cells (Seipold et al., 2009). Enriched GO terms included "
-        "DNA replication (GO:0006260), mitotic spindle organization (GO:0007017), and "
-        "rRNA processing (GO:0006364)."
+        "The top features all tie back to cell-cycle regulation. MCM10 helps the CMG helicase "
+        "complex unwind DNA during replication (Langston et al., 2017). RFC4 brings DNA polymerase "
+        "delta to repair sites (Overmeer et al., 2010). SPC25 is part of the kinetochore complex "
+        "that separates chromosomes during mitosis (Bharadwaj et al., 2004). NCAPH helps assemble "
+        "condensin I for chromosome condensation in dividing cells (Seipold et al., 2009). "
+        "The enriched GO terms confirm this: DNA replication, mitotic spindle organization, "
+        "and rRNA processing all point to active cell division."
     )
 
 
 def build_introduction_p1() -> str:
     return (
-        "Proliferation rate correlates with survival and chemotherapy response in colorectal "
+        "Proliferation rate matters for survival and chemotherapy response in colorectal "
         "cancer. Clinicians estimate it through Ki-67 immunohistochemistry or tumor staging, "
-        "but both have limitations. Ki-67 scoring has inter-observer variability, and staging "
-        "is too coarse to capture the transcriptomic consequences of cell-cycle deregulation. "
+        "but both have problems. Ki-67 scoring varies between pathologists, and staging "
+        "misses the transcriptomic effects of cell-cycle deregulation. "
         "The consensus molecular subtypes (CMS1-4) capture some of this heterogeneity "
-        "(Guinney et al., 2015), and the TCGA network has described the genomic landscape of "
-        "colon adenocarcinoma in detail (TCGA Network, 2012), but neither framework provides "
+        "(Guinney et al., 2015), and the TCGA network has mapped the genomic landscape of "
+        "colon adenocarcinoma in detail (TCGA Network, 2012), but neither gives "
         "a direct, quantitative proliferation score from gene expression data that generalizes "
         "across microarray and RNA-seq platforms."
     )
@@ -712,18 +711,18 @@ def build_discussion_benchmarking_intro() -> str:
 
 def build_system_architecture_text() -> str:
     return (
-        "The ColoGrowth-ML pipeline is organized into four stages. "
-        "Stage 1 (Data Ingestion) downloads raw expression matrices from GEO, TCGA, and CPTAC, "
-        "maps probes to gene symbols, and produces sample-by-gene matrices with matched clinical data. "
-        "Stage 2 (Feature Engineering) computes the mean z-score of ten cell-cycle genes as the "
-        "proliferation score, binarizes at the median, removes those ten genes from the feature set "
+        "The pipeline has four phases. First, data ingestion downloads raw expression matrices "
+        "from GEO, TCGA, and CPTAC, maps probes to gene symbols, and builds sample-by-gene "
+        "matrices with matched clinical data. "
+        "Second, feature engineering computes the proliferation score as the mean z-score of ten "
+        "cell-cycle genes, binarizes at the median, removes those ten genes from the feature set "
         "to prevent label leakage, and encodes clinical covariates. "
-        "Stage 3 (Training) builds a scikit-learn Pipeline with VarianceThreshold, StandardScaler, "
-        "StabilitySelector (Meinshausen & Buhlmann, 2010), and the classifier. Nested cross-validation "
-        "(5-fold outer, 3-fold inner) tunes hyperparameters via GridSearchCV. The best pipeline is "
-        "evaluated on a held-out 20% test split. "
-        "Stage 4 (Analysis and Paper Generation) runs survival analysis, calibration benchmarking, "
-        "drug sensitivity screening, and dynamically generates the publication-ready manuscript."
+        "Third, training wraps VarianceThreshold, StandardScaler, StabilitySelector, and the "
+        "classifier into a scikit-learn Pipeline. Nested cross-validation (5-fold outer, 3-fold "
+        "inner) tunes hyperparameters through GridSearchCV. The best pipeline is evaluated on "
+        "a held-out 20% test split. "
+        "Fourth, analysis and paper generation runs survival analysis, calibration benchmarking, "
+        "drug sensitivity screening, and assembles the manuscript from the metrics files."
     )
 
 
@@ -742,15 +741,15 @@ def build_synthetic_validation_text() -> str:
     with open(SYNTH_SUMMARY_PATH) as f:
         summary = json.load(f)
     return (
-        f"To validate that the pipeline selects genuinely predictive features rather than "
-        f"noise, I generated a synthetic expression dataset ({summary['n_samples']} samples, "
-        f"{summary['n_genes']} genes) where exactly {summary['n_signal']} genes carried the true "
-        f"proliferation signal. The remaining genes were pure noise. "
-        f"Across all four model classes, the pipeline recovered 100% of the true signal genes "
-        f"(recall = 1.00) with an average enrichment of {summary['avg_enrichment']:.1f}x over random "
-        f"selection. The best model ({summary['best_model']}) achieved an AUC of {summary['best_auc']:.4f}, "
-        f"confirming that the feature selection and classification pipeline correctly identifies "
-        f"biologically relevant features when the ground truth is known."
+        f"To test whether the pipeline actually finds real signal rather than noise, "
+        f"I built a synthetic dataset ({summary['n_samples']} samples, "
+        f"{summary['n_genes']} genes) where exactly {summary['n_signal']} genes drove the "
+        f"target. The rest were random noise. "
+        f"All four models found 100% of the true signal genes "
+        f"(recall = 1.00) at an average enrichment of {summary['avg_enrichment']:.1f}x over random "
+        f"chance. The best model ({summary['best_model']}) hit an AUC of {summary['best_auc']:.4f}, "
+        f"which tells me the pipeline is actually finding relevant features when there are "
+        f"real ones to find."
     )
 
 
@@ -776,9 +775,9 @@ def build_synthetic_validation_table() -> list[tuple]:
 
 def build_reproducibility_text() -> str:
     return (
-        "The entire pipeline is containerized via Docker for cross-platform reproducibility. "
-        "Running `docker compose up` builds the environment, installs dependencies, downloads "
-        "all datasets, trains classifiers, runs survival and drug analyses, and produces the "
-        "final paper. A `reproduce.sh` script is also provided for non-Docker execution. "
-        "All random seeds are fixed (random_state=42) for deterministic reproduction."
+        "You can reproduce everything with Docker. Run `docker compose up` and it builds "
+        "the environment, installs dependencies, downloads datasets, trains classifiers, "
+        "runs the analyses, and generates the paper. There is also a `reproduce.sh` script "
+        "if you prefer running without Docker. All random seeds are fixed at 42 so results "
+        "should be deterministic."
     )

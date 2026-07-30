@@ -65,8 +65,8 @@ from paper_metrics import (
     build_synthetic_validation_table,
 )
 
-TITLE = "Cross-Platform Colon Cancer Proliferation Classification via Leakage-Free ML"
-SUBTITLE = "A computational biology and machine learning study"
+TITLE = "Leakage-controlled machine learning classifiers for cross-platform colon cancer proliferation prediction from transcriptomic data"
+SUBTITLE = ""
 AUTHOR_LINE = "Rohan Saindane"
 
 styles = getSampleStyleSheet()
@@ -200,14 +200,19 @@ def build_story(metrics, stats, results_dir):
     p(story, "Leakage-controlled ML classifiers achieve high cross-platform accuracy for colon cancer proliferation classification, but the effect size is large (d = 2.3), and proliferation does not independently predict survival after stage adjustment. The framework prioritizes methodological rigor over inflated performance claims and provides a reproducible template for transcriptomic classifier development.")
     story.append(Spacer(1, 10))
 
-    h(story, "1. Introduction")
+    h2(story, "Keywords")
+    p(story, "colon cancer; proliferation; machine learning; cross-platform validation; feature selection; transcriptomics; leakage control; reproducibility")
+
+    story.append(Spacer(1, 6))
+
+    h(story, "Introduction")
     p(story, build_introduction_p1())
     p(story, build_introduction_p2())
 
     story.append(PageBreak())
 
-    h(story, "2. Materials and Methods")
-    h2(story, "2.1 System Architecture")
+    h(story, "Materials and Methods")
+    h2(story, "System Architecture")
     p(story, build_system_architecture_text())
     p(story, build_methods_p1(stats))
 
@@ -238,7 +243,7 @@ def build_story(metrics, stats, results_dir):
     table(story, hp_rows, [1.3 * inch, 1.4 * inch, 1.3 * inch, 0.9 * inch, 1.85 * inch],
           "Table 2. Hyperparameter optimization search ranges and selected settings.", size=7.5)
 
-    h2(story, "2.2 Software Environment")
+    h2(story, "Software Environment")
     sw_rows = [
         ["Software", "Version", "Purpose"],
         ["Python", "3.14.5", "Core programming language"],
@@ -258,7 +263,7 @@ def build_story(metrics, stats, results_dir):
 
     story.append(PageBreak())
 
-    h(story, "3. Results")
+    h(story, "Results")
     p(story, build_results_opening(metrics))
 
     perf_rows = [["Model", "CV ROC-AUC (mean +/- std)", "Holdout Accuracy (95% CI)", "Holdout ROC-AUC (95% CI)"]]
@@ -274,7 +279,7 @@ def build_story(metrics, stats, results_dir):
 
     story.append(PageBreak())
 
-    h(story, "4. Interpretation and Biological Readout")
+    h(story, "Interpretation and Biological Readout")
     p(story, build_interpretation_p1())
 
     gene_rows = [["Rank", "Gene Symbol", "ANOVA F-Score", "CV Selection Frequency"]]
@@ -307,7 +312,7 @@ def build_story(metrics, stats, results_dir):
 
     story.append(PageBreak())
 
-    h(story, "5. Demographic Subgroups & Prognostic Validation")
+    h(story, "Subgroup and Prognostic Validation")
     p(story, build_clinical_validation_p1())
 
     # Table 6: updated to 7 columns!
@@ -335,7 +340,7 @@ def build_story(metrics, stats, results_dir):
 
     story.append(PageBreak())
 
-    h(story, "6. Pre-Processing Sensitivity & Robustness Analysis")
+    h(story, "Sensitivity and Robustness Analysis")
     p(story, build_sensitivity_p1())
 
     sens_rows = [["SelectKBest k", "Holdout ROC-AUC (k)", "Variance Threshold (VT)", "Features Passed VT", "Holdout ROC-AUC (VT)"]]
@@ -343,7 +348,7 @@ def build_story(metrics, stats, results_dir):
     table(story, sens_rows, [1.2 * inch, 1.45 * inch, 1.5 * inch, 1.35 * inch, 1.45 * inch],
           "Table 9. Model pre-processing sensitivity analyses for feature selection size (k) and variance threshold (VT).")
 
-    h(story, "7. Synthetic Ground-Truth Validation")
+    h(story, "Synthetic Ground-Truth Validation")
     p(story, build_synthetic_validation_text())
     synth_rows = [["Model", "AUC", "Accuracy", "Signal Genes Selected", "Enrichment"]]
     synth_rows.extend([list(r) for r in build_synthetic_validation_table()])
@@ -352,7 +357,7 @@ def build_story(metrics, stats, results_dir):
 
     story.append(PageBreak())
 
-    h(story, "8. Discussion")
+    h(story, "Discussion")
     p(story, build_discussion_paragraph())
 
     # Task 3.1 - Benchmarking Table
@@ -365,7 +370,7 @@ def build_story(metrics, stats, results_dir):
     # Task 3.4 - Biological Mechanism Discussion Expansion
     p(story, build_discussion_pathway_expansion())
 
-    h(story, "9. Limitations and Future Directions")
+    h(story, "Limitations and Future Directions")
     h2(story, "Limitations")
     for item in [
         "Sample size: GEO GSE39582 (n=585) is moderate. CPTAC-COAD (n=105) has only 7 survival events, substantially limiting statistical power for survival analysis on that cohort.",
@@ -506,7 +511,7 @@ def main():
     base = project_root()
     results_dir = base / "results"
     data_dir = base / "data" / "processed"
-    pdf_path = base / "paper" / "colon_cancer_growth_prediction_research_paper.pdf"
+    pdf_path = base / "paper" / "biorxiv_manuscript.pdf"
 
     metrics = load_leakage_fixed_metrics(args.dataset, results_dir)
     stats = load_dataset_stats(args.dataset, data_dir)

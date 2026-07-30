@@ -21,12 +21,12 @@ High AUC is not always high utility. This study reports ROC-AUCs above 0.97 for 
 \end{abstract}
 
 \section{Introduction}
-Proliferation rate correlates with survival and chemotherapy response in colorectal cancer. Clinicians estimate it through Ki-67 immunohistochemistry or tumor staging, but both have limitations. Ki-67 scoring has inter-observer variability, and staging is too coarse to capture the transcriptomic consequences of cell-cycle deregulation. The consensus molecular subtypes (CMS1-4) capture some of this heterogeneity (Guinney et al., 2015), and the TCGA network has described the genomic landscape of colon adenocarcinoma in detail (TCGA Network, 2012), but neither framework provides a direct, quantitative proliferation score from gene expression data that generalizes across microarray and RNA-seq platforms.
+Proliferation rate matters for survival and chemotherapy response in colorectal cancer. Clinicians estimate it through Ki-67 immunohistochemistry or tumor staging, but both have problems. Ki-67 scoring varies between pathologists, and staging misses the transcriptomic effects of cell-cycle deregulation. The consensus molecular subtypes (CMS1-4) capture some of this heterogeneity (Guinney et al., 2015), and the TCGA network has mapped the genomic landscape of colon adenocarcinoma in detail (TCGA Network, 2012), but neither gives a direct, quantitative proliferation score from gene expression data that generalizes across microarray and RNA-seq platforms.
 
 I trained four classifiers on GEO microarray data (GSE39582, Marisa et al., 2013) to predict high versus low proliferation from gene expression plus clinical covariates. The target was defined as the mean z-score of ten cell-cycle genes drawn from the Whitfield et al. (2002) cell-cycle catalogue. Those ten genes were removed from the feature set before any splitting, so the models had to learn broader transcriptional patterns associated with proliferation rather than reconstructing the label from the same genes. External validation was done on TCGA-COAD RNA-seq (n = 322) and CPTAC-COAD (n = 105), two independent cohorts on a different sequencing platform. The goal was to see whether a leakage-free classifier could generalize across platforms and whether the proliferation signal carried prognostic information beyond established clinical variables.
 
 \section{Materials and Methods}
-The GEO_PAN processed dataset contains 823 samples and 22182 features after signature-gene removal. Clinical covariates include age, sex, and stage. The binary target is balanced with 411 low, 412 high. An 80/20 stratified split produced a training pool of 658 samples and a holdout test set of 165 samples.
+The GEO processed dataset contains 585 samples and 22182 features after signature-gene removal. Clinical covariates include age, sex, and stage. The binary target is balanced with 292 low, 293 high. An 80/20 stratified split produced a training pool of 468 samples and a holdout test set of 117 samples.
 
 \begin{table}[H]
 \centering
@@ -35,9 +35,9 @@ The GEO_PAN processed dataset contains 823 samples and 22182 features after sign
 \toprule
 \textbf{Dataset file} & \textbf{Samples} & \textbf{Features/columns} & \textbf{Class balance} \\
 \midrule
-  geo_pan_X_features / y_target & 823 & 22182 & 411 low, 412 high \\
-  Training pool (80% stratified split) & 658 & 22182 & Stratified by class \\
-  Holdout test (20% stratified split) & 165 & 22182 & Stratified by class \\
+  geo_X_features / y_target & 585 & 22182 & 292 low, 293 high \\
+  Training pool (80% stratified split) & 468 & 22182 & Stratified by class \\
+  Holdout test (20% stratified split) & 117 & 22182 & Stratified by class \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -83,12 +83,12 @@ I defined the target as the mean z-score of ten cell-cycle genes: MKI67, PCNA, T
 \end{table}
 
 \subsection*{System Architecture and Pipeline Design}
-The ColoGrowth-ML pipeline is organized into four stages. Stage 1 (Data Ingestion) downloads raw expression matrices from GEO, TCGA, and CPTAC, maps probes to gene symbols, and produces sample-by-gene matrices with matched clinical data. Stage 2 (Feature Engineering) computes the mean z-score of ten cell-cycle genes as the proliferation score, binarizes at the median, removes those ten genes from the feature set to prevent label leakage, and encodes clinical covariates. Stage 3 (Training) builds a scikit-learn Pipeline with VarianceThreshold, StandardScaler, StabilitySelector (Meinshausen & Buhlmann, 2010), and the classifier. Nested cross-validation (5-fold outer, 3-fold inner) tunes hyperparameters via GridSearchCV. The best pipeline is evaluated on a held-out 20% test split. Stage 4 (Analysis and Paper Generation) runs survival analysis, calibration benchmarking, drug sensitivity screening, and dynamically generates the publication-ready manuscript.
+The pipeline has four phases. First, data ingestion downloads raw expression matrices from GEO, TCGA, and CPTAC, maps probes to gene symbols, and builds sample-by-gene matrices with matched clinical data. Second, feature engineering computes the proliferation score as the mean z-score of ten cell-cycle genes, binarizes at the median, removes those ten genes from the feature set to prevent label leakage, and encodes clinical covariates. Third, training wraps VarianceThreshold, StandardScaler, StabilitySelector, and the classifier into a scikit-learn Pipeline. Nested cross-validation (5-fold outer, 3-fold inner) tunes hyperparameters through GridSearchCV. The best pipeline is evaluated on a held-out 20% test split. Fourth, analysis and paper generation runs survival analysis, calibration benchmarking, drug sensitivity screening, and assembles the manuscript from the metrics files.
 
-The entire pipeline is containerized via Docker for cross-platform reproducibility. Running `docker compose up` builds the environment, installs dependencies, downloads all datasets, trains classifiers, runs survival and drug analyses, and produces the final paper. A `reproduce.sh` script is also provided for non-Docker execution. All random seeds are fixed (random_state=42) for deterministic reproduction.
+You can reproduce everything with Docker. Run `docker compose up` and it builds the environment, installs dependencies, downloads datasets, trains classifiers, runs the analyses, and generates the paper. There is also a `reproduce.sh` script if you prefer running without Docker. All random seeds are fixed at 42 so results should be deterministic.
 
 \section{Results}
-I tested four models with nested five-fold CV on the GEO training pool (n = 468) after removing the ten signature genes. Mean CV ROC-AUCs were similar across models: Logistic Regression 0.9811 (+/- 0.0041), Random Forest 0.9788 (+/- 0.0047), XGBoost 0.9783 (+/- 0.0060), and MLP 0.9781 (+/- 0.0048). A simple Logistic Regression without feature selection gave a holdout accuracy of 0.9697, compared to 0.4970 for a majority-class baseline.
+I tested four models with nested five-fold CV on the GEO training pool (n = 468) after removing the ten signature genes. Mean CV ROC-AUCs were similar across models: Logistic Regression 0.9801 (+/- 0.0092), Random Forest 0.9832 (+/- 0.0094), XGBoost 0.9756 (+/- 0.0120), and MLP 0.9711 (+/- 0.0184). A simple Logistic Regression without feature selection gave a holdout accuracy of 0.9697, compared to 0.4970 for a majority-class baseline.
 
 \begin{table}[H]
 \centering
@@ -97,10 +97,10 @@ I tested four models with nested five-fold CV on the GEO training pool (n = 468)
 \toprule
 \textbf{Model} & \textbf{CV ROC-AUC} & \textbf{Holdout Accuracy (95\% CI)} & \textbf{Holdout ROC-AUC (95\% CI)} \\
 \midrule
-  Logistic Regression & 0.9811 (+/- 0.0041) & 0.9030 (95% CI: 0.8545-0.9455) & 0.9850 (95% CI: 0.9713-0.9953) \\
-  Random Forest & 0.9788 (+/- 0.0047) & 0.9273 (95% CI: 0.8848-0.9636) & 0.9871 (95% CI: 0.9748-0.9959) \\
-  XGBoost & 0.9783 (+/- 0.0060) & 0.9273 (95% CI: 0.8848-0.9697) & 0.9910 (95% CI: 0.9813-0.9978) \\
-  Neural Network (MLP) & 0.9781 (+/- 0.0048) & 0.8970 (95% CI: 0.8485-0.9455) & 0.9812 (95% CI: 0.9647-0.9937) \\
+  Logistic Regression & 0.9801 (+/- 0.0092) & 0.9030 (95% CI: 0.8545-0.9455) & 0.9850 (95% CI: 0.9713-0.9953) \\
+  Random Forest & 0.9832 (+/- 0.0094) & 0.9273 (95% CI: 0.8848-0.9636) & 0.9871 (95% CI: 0.9748-0.9959) \\
+  XGBoost & 0.9756 (+/- 0.0120) & 0.9273 (95% CI: 0.8848-0.9697) & 0.9910 (95% CI: 0.9813-0.9978) \\
+  Neural Network (MLP) & 0.9711 (+/- 0.0184) & 0.8970 (95% CI: 0.8485-0.9455) & 0.9812 (95% CI: 0.9647-0.9937) \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -111,7 +111,7 @@ I tested four models with nested five-fold CV on the GEO training pool (n = 468)
 \caption{Calibration curves showing observed positive fraction vs. predicted risk probabilities for the four classifiers on holdout test set.}
 \end{figure}
 
-On the holdout set (n = 117), XGBoost had an ROC-AUC of 0.9910 (95% CI: 0.9813-0.9978) and accuracy of 0.9273. On holdout: Logistic Regression (Brier=0.0513, ECE=0.0722), Random Forest (Brier=0.0517, ECE=0.0492), XGBoost (Brier=0.0461, ECE=0.0481), Neural Network (MLP) (Brier=0.0566, ECE=0.0625). Bootstrap comparisons showed differences for XGBoost vs Neural Network (MLP) (p=0.0369). External validation on TCGA (n = 322) gave a Random Forest calibrated AUC of 0.973 and accuracy of 0.921, with XGBoost close behind at 0.968 and 0.903. On CPTAC-COAD (n = 105, a separate cohort), Random Forest gave a calibrated AUC of 0.9487 and accuracy of 0.8679. Full results: Logistic Regression (AUC=0.8832, Acc=0.7925); Random Forest (AUC=0.9487, Acc=0.8679); XGBoost (AUC=0.9231, Acc=0.8302); Neural Network (MLP) (AUC=0.9402, Acc=0.8302).
+On the holdout set (n = 117), Logistic Regression had an ROC-AUC of 0.9850 (95% CI: 0.9713-0.9953) and accuracy of 0.9487. On holdout: Logistic Regression (Brier=0.0513, ECE=0.0722), Random Forest (Brier=0.0517, ECE=0.0492), XGBoost (Brier=0.0461, ECE=0.0481), Neural Network (MLP) (Brier=0.0566, ECE=0.0625). Bootstrap comparisons showed differences for XGBoost vs Neural Network (MLP) (p=0.0369). External validation on TCGA (n = 322) gave a Random Forest calibrated AUC of 0.973 and accuracy of 0.921, with XGBoost close behind at 0.968 and 0.903. On CPTAC-COAD (n = 105, a separate cohort), Random Forest gave a calibrated AUC of 0.9487 and accuracy of 0.8679. Full results: Logistic Regression (AUC=0.8832, Acc=0.7925); Random Forest (AUC=0.9487, Acc=0.8679); XGBoost (AUC=0.9231, Acc=0.8302); Neural Network (MLP) (AUC=0.9402, Acc=0.8302).
 
 \section{Interpretation and Biological Readout}
 SHAP summaries were generated from pipeline-transformed, leakage-free features. Because the ten signature genes used to define the proliferation label were removed before training, top-ranked features should be interpreted as candidate biological or clinical correlates rather than label-construction artifacts.
@@ -156,7 +156,7 @@ SHAP summaries were generated from pipeline-transformed, leakage-free features. 
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.68\linewidth]{results/pathway_enrichment.png}
-\caption{Enriched biological pathways (FDR < 0.05) representing transcriptomic cascade signatures downstream of cancer cell division.}
+\caption{Enriched biological pathways (FDR < 0.05) linked to cell-cycle progression and division.}
 \end{figure}
 
 \begin{figure}[H]
@@ -256,7 +256,7 @@ Sensitivity analyses varied feature selection count (k) and variance threshold (
 \end{table}
 
 \section{Synthetic Ground-Truth Validation}
-To validate that the pipeline selects genuinely predictive features rather than noise, I generated a synthetic expression dataset (300 samples, 2000 genes) where exactly 20 genes carried the true proliferation signal. The remaining genes were pure noise. Across all four model classes, the pipeline recovered 100% of the true signal genes (recall = 1.00) with an average enrichment of 7.7x over random selection. The best model (Random Forest) achieved an AUC of 0.9878, confirming that the feature selection and classification pipeline correctly identifies biologically relevant features when the ground truth is known.
+To test whether the pipeline actually finds real signal rather than noise, I built a synthetic dataset (300 samples, 2000 genes) where exactly 20 genes drove the target. The rest were random noise. All four models found 100% of the true signal genes (recall = 1.00) at an average enrichment of 7.7x over random chance. The best model (Random Forest) hit an AUC of 0.9878, which tells me the pipeline is actually finding relevant features when there are real ones to find.
 
 \begin{table}[H]
 \centering
@@ -294,7 +294,7 @@ The TCGA validation AUC of 0.97 also came with help from quantile normalization.
 \end{tabular}
 \end{table}
 
-Top features MCM10, SPC25, NCAPH, and RFC4 are downstream of cell-cycle entry. MCM10 supports DNA replication via CMG helicase complex isomerization (Langston et al., 2017). RFC4 recruits DNA polymerase delta to repair sites (Overmeer et al., 2010). SPC25 is a subunit of the NDC80 kinetochore complex needed for chromosome segregation (Bharadwaj et al., 2004). NCAPH is involved in condensin I assembly for chromosome condensation in proliferating cells (Seipold et al., 2009). Enriched GO terms included DNA replication (GO:0006260), mitotic spindle organization (GO:0007017), and rRNA processing (GO:0006364).
+The top features all tie back to cell-cycle regulation. MCM10 helps the CMG helicase complex unwind DNA during replication (Langston et al., 2017). RFC4 brings DNA polymerase delta to repair sites (Overmeer et al., 2010). SPC25 is part of the kinetochore complex that separates chromosomes during mitosis (Bharadwaj et al., 2004). NCAPH helps assemble condensin I for chromosome condensation in dividing cells (Seipold et al., 2009). The enriched GO terms confirm this: DNA replication, mitotic spindle organization, and rRNA processing all point to active cell division.
 
 \section{Limitations and Future Directions}
 \subsection*{Limitations}

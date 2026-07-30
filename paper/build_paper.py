@@ -385,7 +385,7 @@ def add_interpretation(doc, results_dir):
     add_figure(
         doc,
         results_dir / "pathway_enrichment.png",
-        "Figure 3. Enriched biological pathways (FDR < 0.05) representing transcriptomic cascade signatures downstream of cancer cell division.",
+        "Figure 3. Enriched biological pathways (FDR < 0.05) linked to cell-cycle progression and division.",
         width=5.35,
     )
     
@@ -816,7 +816,7 @@ SHAP summaries were generated from pipeline-transformed, leakage-free features. 
 \\begin{{figure}}[H]
 \\centering
 \\includegraphics[width=0.68\\linewidth]{{results/pathway_enrichment.png}}
-\\caption{{Enriched biological pathways (FDR < 0.05) representing transcriptomic cascade signatures downstream of cancer cell division.}}
+\\caption{{Enriched biological pathways (FDR < 0.05) linked to cell-cycle progression and division.}}
 \\end{{figure}}
 
 \\begin{{figure}}[H]
