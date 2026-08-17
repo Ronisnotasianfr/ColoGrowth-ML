@@ -1,0 +1,2 @@
+dataset,best_C,n_genes_selected,holdout_auc,holdout_accuracy,bootstrap_mean_pairwise_jaccard,bootstrap_genes_selected_ge_50pct
+geo_pan,0.1,83,0.9848662944460771,0.9151515151515152,0.17015225629972713,30

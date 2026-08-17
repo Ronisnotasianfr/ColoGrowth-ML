@@ -44,17 +44,21 @@ python -m src.power_analysis
 # 13. Drug sensitivity screen (GDSC2, 295 drugs, Bonferroni-corrected)
 python src/drug_sensitivity.py --drugs 20
 
-# 14. Rebuild paper (Word + LaTeX + PDF)
-python paper/build_paper.py --dataset geo_pan
-python paper/build_pdf.py --dataset geo_pan
+# 14. Manuscripts are pure LaTeX — compile from overleaf/ subfolders:
+#     research_paper (flagship, natbib + references.bib), poster, one_page_summary,
+#     synthica_submission (journal submission, IEEEtran refs)
+#     (each folder is self-contained: main.tex + figures/ [+ references.bib])
 
 # 15. Synthetic ground-truth validation
 python -m src.synthetic_validation
 
+# 16. LASSO minimal gene set (external review response)
+python -m src.lasso_minimal_model --dataset geo_pan
+
 echo ""
 echo "=== ALL PIPELINE STEPS COMPLETE ==="
 echo "Results in: results/"
-echo "Paper in:   paper/"
+echo "LaTeX in:   overleaf/ (research_paper, poster, one_page_summary, synthica_submission)"
 echo "Models in:  models/"
 echo ""
 echo "Docker: docker compose up --build"

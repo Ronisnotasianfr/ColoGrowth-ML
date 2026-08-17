@@ -1,142 +1,103 @@
-# ColoGrowth-ML: Cross-Platform Calibration Benchmark for Colon Cancer Proliferation Classification
+# ColoGrowth-ML: Leakage-Free Colon Cancer Proliferation Classification
 
 [![Python](https://img.shields.io/badge/python-3.8--3.12-blue?logo=python&logoColor=white)](https://python.org)
 [![scikit-learn](https://img.shields.io/badge/scikit--learn-1.3+-F7931E?logo=scikit-learn&logoColor=white)](https://scikit-learn.org)
 [![XGBoost](https://img.shields.io/badge/XGBoost-2.0+-orange?logo=xgboost&logoColor=white)](https://xgboost.readthedocs.io)
 [![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)](https://docker.com)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow?logo=open-source-initiative&logoColor=white)](LICENSE)
-[![DOI](https://img.shields.io/badge/DOI-pending-lightgrey?logo=doi&logoColor=white)](https://github.com/Ronisnotasianfr/ColoGrowth-ML)
 
-A systematic benchmark evaluating **5 calibration methods** across **4 model classes** for leakage-free colon cancer proliferation classification. Models trained on GEO microarray cohorts (n=823), validated cross-platform on TCGA-COAD RNA-seq (n=329) and CPTAC-COAD proteomics (n=105), and tested for clinical relevance via survival analysis, Ki-67 correlation, and GDSC2 drug sensitivity screening (295 drugs, Bonferroni-corrected).
+Classifies colon cancer tumors as high or low proliferation from gene expression, trained on one platform (microarray) and validated on two others (RNA-seq, proteomics). The main design constraint is leakage control: the ten cell-cycle genes used to define the label are removed from the feature matrix before any split, and every preprocessing step runs inside a pipeline with nested cross-validation.
 
----
+Four models are compared (logistic regression, random forest, XGBoost, MLP), always with calibration (Platt, isotonic, quantile normalization, QN+Platt), and checked against survival data, Ki-67 expression, a GDSC2 drug screen, and synthetic ground truth.
+
+The honest notes on what went wrong and what I would do differently are in [NOTES.md](NOTES.md). The full manuscript lives in `overleaf/` as LaTeX.
 
 ## Key Findings
 
-| Model | Optimal Calibration | TCGA AUC | TCGA Accuracy | TCGA ECE |
+| Model | BCV | Hold-out ROC-AUC | Calibrated TCGA AUC | TCGA ECE |
 |---|---|---|---|---|
-| Random Forest | Platt Scaling | 0.973 | 0.921 | **0.043** |
-| XGBoost | Platt Scaling | 0.968 | 0.903 | **0.038** |
-| Logistic Regression | None | 0.936 | 0.855 | 0.082 |
-| MLP Neural Network | Isotonic Regression | 0.935 | 0.848 | **0.029** |
+| Logistic Regression | 0.9801 ± 0.0092 | 0.9850 | 0.941 (isotonic) | 0.037 |
+| Random Forest | 0.9832 ± 0.0094 | 0.9871 | 0.973 (Platt) | 0.043 |
+| XGBoost | 0.9756 ± 0.0120 | 0.9910 | 0.968 (Platt) | 0.038 |
+| MLP | 0.9711 ± 0.0184 | 0.9812 | 0.935 (isotonic) | 0.029 |
 
-- **Platt Scaling** reduces ECE for tree-based models by 3× (RF: 0.115 → 0.043; 95% CIs non-overlapping, p<0.05)
-- **Isotonic Regression** minimizes ECE for neural networks (MLP: 0.029)
-- **Cross-platform generalizability** maintained across microarray → RNA-seq → proteomics platforms
-- **Ki-67 biological validation**: predicted proliferation correlates with MKI67 expression (r=0.589)
-- **Drug screen**: 5/5 top hits target the MAPK/ERK pathway — Trametinib (p=1.8×10⁻¹²), PD0325901 (p=5.9×10⁻¹²), SCH772984 (p=1.1×10⁻¹⁰) — all surviving Bonferroni correction (α/295=1.69×10⁻⁴)
-- **Survival stratification**: high-proliferation patients show significantly worse OS (TCGA PanCancer log-rank p=0.009; GEO GSE39582 p=0.037)
+Other results:
 
----
+- Hold-out ROC-AUC 0.981 to 0.991 across the four models (XGBoost best).
+- External transfer: random forest AUC 0.973 / accuracy 0.921 on TCGA-COAD RNA-seq, 0.949 / 0.868 on CPTAC-COAD proteomics.
+- Platt scaling cut ECE roughly 3x for random forest (0.115 to 0.043, non-overlapping 95% CIs). QN+Platt was the best cross-platform protocol for logistic regression.
+- Model scores correlate with Ki-67 (MKI67) expression even though MKI67 was held out of training: r=0.589 (GEO), r=0.543 (TCGA).
+- High proliferation predicts shorter survival before staging (log-rank p=0.037 GEO, p=0.009 pan-cancer), but not after Cox adjustment for stage (HR 0.84, p=0.31). Details, including why the null is a real null and not underpowering, are in the paper.
+- Drug screen (295 GDSC2 compounds, Bonferroni corrected): the top five hits all target the MAPK/ERK axis, Trametinib first at p=1.8x10^-12.
+- Synthetic ground-truth experiment: all four models recovered 20/20 planted signal genes (7.7x enrichment).
+- A LASSO minimal panel of 83 genes matches the full 500-feature pipeline (hold-out AUC 0.9849 vs 0.9834). Most stable genes: KIF23, DNA2, MCM3.
+- Feature selection is stable: the same top-20 genes are selected in all 5 outer folds.
 
-## Overview
+Two caveats that matter when reading the AUCs: the classes are separated by a Cohen's d of 2.3, so the task is easier than typical clinical ML problems, and the Cox result shows the score adds no independent survival information beyond stage in these cohorts.
 
-![Calibration Benchmark](results/calibration_benchmark.png)
-
-```
-GEO GSE39582 (n=585) ───────────────────┐
-GEO GSE17538 (n=238) ──── merge ───► preprocess ──► train (nested 5-fold CV) ──► 12 models
-                                        │                                           │
-                                        │  ┌─ external_validation.py ──► TCGA / CPTAC
-                                        │  ├─ calibration_benchmark.py ──► 5×4 comparison
-                                        │  ├─ survival.py ──► KM + log-rank
-                                        │  ├─ ki67_correlation.py ──► biological validation
-                                        │  ├─ complete_analysis.py ──► DCA, Cox PH, subgroups
-                                        │  ├─ synthetic_validation.py ──► ground-truth recovery
-                                        │  ├─ ablation_study.py ──► feature selection comparison
-                                        │  ├─ power_analysis.py ──► Schoenfeld power
-                                        │  └─ drug_sensitivity.py ──► GDSC2 screen
-                                        │
-                                        └─ paper/ ──► manuscript generation
-```
-
----
-
-## Results Gallery
-
-| | |
-|---|---|
-| ![ROC](results/roc_curves_comparison.png) | ![Calibration](results/calibration_comparison_curves.png) |
-| ![KM](results/kaplan_meier_tcga_pan.png) | ![Drug](results/drug_sensitivity_top_drugs.png) |
-| ![DCA](results/clinical_dca.png) | ![SHAP](results/shap_summary_xgboost.png) |
-
----
-
-## Methodology
-
-### Data Sources
+## Data
 
 | Dataset | Platform | Size | Role |
 |---|---|---|---|
-| GEO GSE39582 | Affymetrix GPL570 | n=585 | Primary training |
-| GEO GSE17538 | Affymetrix GPL570 | n=238 | Expanded training |
+| GEO GSE39582 | Affymetrix GPL570 | n=585 | Training + hold-out |
+| GEO GSE17538 | Affymetrix GPL570 | n=238 | Survival power check |
 | TCGA-COAD | Illumina RNA-seq | n=329 | External validation |
-| TCGA-READ | Illumina RNA-seq | n=105 | Pan-cancer validation |
-| CPTAC-COAD | Proteomics | n=105 | Cross-platform validation |
-| GDSC2 | Drug screening | 295 drugs × 969 lines | Drug sensitivity |
+| TCGA-READ | Illumina RNA-seq | n=105 | Pan-cancer survival |
+| CPTAC-COAD | Mass spectrometry | n=105 | Proteomics validation |
+| GDSC2 | Drug screen | 295 drugs x 969 lines | Drug sensitivity |
 
-### Models
+Downloads happen in `src/preprocess.py`/`reproduce.sh`; raw data is not committed.
 
-- Logistic Regression
-- Random Forest
-- XGBoost
-- MLP Neural Network
+## Methods in one line each
 
-### Calibration Methods
-
-- No Calibration (baseline)
-- Platt Scaling
-- Isotonic Regression
-- QN+Platt
-- QN-only
-
-### Leakage Prevention
-
-The 10 proliferation-defining genes (Whitfield et al., 2002) used to compute the binary target are removed from feature matrices prior to any data splitting or model training. Feature selection uses a bootstrap-stability-based selector (Meinshausen & Bühlmann, 2010).
-
----
+- Target: mean z-score of ten cell-cycle genes (Whitfield et al. 2002), binarized at the cohort median.
+- Leakage control: those ten genes are dropped before any split; feature selection lives inside nested CV folds.
+- Selector: bootstrap consensus (StabilitySelector), a practical take on Meinshausen and Buhlmann (2010); kept when present in the top-K of at least 50% of resamples.
+- Calibration: Platt, isotonic, QN, QN+Platt, compared with bootstrap ECE intervals.
+- Statistics: 1000-resample bootstrap CIs, log-rank, Cox PH, Schoenfeld power, Mann-Whitney U with Bonferroni correction for drugs.
 
 ## Reproduce
 
 ```bash
 pip install -r requirements.txt
 bash reproduce.sh
-# ~10 minutes on a modern CPU
+# roughly 5-10 minutes on a modern CPU
 ```
 
-### Docker
+Docker:
 
 ```bash
 docker compose up --build
 ```
 
-### Tests
+Tests:
 
 ```bash
 pytest tests/ -v
 ```
 
----
-
-## Repository Structure
+## Repository layout
 
 ```
-├── src/             16 Python modules — preprocessing, training, evaluation,
-│                        calibration, survival, drug sensitivity, synthetic validation
-├── notebooks/       Pipeline notebooks (EDA, preprocessing, training, evaluation)
-├── results/         Figures (PNG/PDF) and metrics CSVs with bootstrap CIs
-├── paper/           LaTeX manuscript source, bibliography, build scripts
-├── models/          12 trained .joblib pipelines (4 models × 3 datasets)
-├── scripts/         Utility scripts (inference demo, etc.)
-├── tests/           Unit tests (data leakage, pipeline integrity)
-├── poster/          Conference poster (HTML)
+├── src/             Pipeline modules: preprocess, train, evaluate, external_validation,
+│                    calibration_benchmark, survival, ki67_correlation, complete_analysis,
+│                    power_analysis, drug_sensitivity, synthetic_validation, ablation_study,
+│                    lasso_minimal_model
+├── notebooks/       EDA, preprocessing, training, evaluation
+├── results/         Metrics CSVs (tracked), figures regenerated by the pipeline
+├── models/          Trained .joblib pipelines (not committed, reproducible)
+├── overleaf/        LaTeX manuscripts, each self-contained
+│   ├── research_paper/     flagship paper (natbib, references.bib)
+│   ├── poster/             beamerposter, 48x36in
+│   ├── one_page_summary/   one-page summary for non-experts
+│   └── synthica_submission/  journal submission form rewrite (IEEEtran refs)
+├── scripts/         Utility scripts
+├── tests/           Leakage and pipeline integrity tests
 ├── reproduce.sh     Full pipeline orchestrator
 ├── Dockerfile       Containerized reproducibility
 ├── docker-compose.yml
 └── requirements.txt
 ```
-
----
 
 ## Citation
 
@@ -144,15 +105,12 @@ If you use this work, please cite:
 
 ```bibtex
 @software{cologrowth_ml_2026,
-  author = {Saindane, Ronit},
-  title = {{ColoGrowth-ML}: Cross-Platform Calibration Benchmark for
-           Colon Cancer Proliferation Classification},
+  author = {Saindane, Rohan},
+  title = {{ColoGrowth-ML}: Leakage-Free Colon Cancer Proliferation Classification},
   year = {2026},
   url = {https://github.com/Ronisnotasianfr/ColoGrowth-ML}
 }
 ```
-
----
 
 ## License
 

@@ -1,0 +1,67 @@
+% One-page research summary — ScienceMontgomery 2025 mentor/outreach handout.
+% Compile with pdflatex on Overleaf.
+\documentclass[10pt]{article}
+\usepackage[margin=0.7in]{geometry}
+\usepackage{times}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{ragged2e}
+\usepackage[hidelinks]{hyperref}
+\usepackage{microtype}
+
+\urlstyle{same}
+\pagestyle{empty}
+\renewcommand{\arraystretch}{1.15}
+\setlength{\parskip}{2.5pt}
+
+\title{\vspace{-0.5cm}\textbf{Cross-Platform Prediction of Colon Cancer Proliferation: A Leakage-Free Machine Learning Pipeline}}
+\author{Rohan Saindane \;|\; Clarksburg High School \;|\; ScienceMontgomery 2025}
+\date{}
+
+\begin{document}
+\maketitle
+\vspace{-1.0cm}
+
+\section*{Background}
+Tumor proliferation rate is a key prognostic marker in colorectal cancer, typically quantified by Ki-67 immunohistochemistry --- a subjective, single-gene readout with high inter-observer variability [1]. A transcriptomic classifier could provide an objective, reproducible substitute, but most cancer ML studies leak label information into feature selection and fail to generalize across platforms [2]. This study builds a leakage-free classifier on one microarray cohort and tests it on independent RNA-seq and proteomics platforms.
+
+\section*{Methods}
+% Extended version: overleaf/research_paper (Aug 2026)
+\begin{itemize}\setlength\itemsep{1pt}
+\item \textbf{Data.} Train on GEO GSE39582 microarray ($n=585$) [3]; externally validate on TCGA-COAD RNA-seq ($n=322$) [4] and CPTAC-COAD mass-spectrometry proteome ($n=105$) [5]; GSE17538 [6] for survival power.
+\item \textbf{Leakage control.} Proliferation label = median split of a 10-gene cell-cycle/proliferation signature (MKI67, PCNA, TOP2A, MCM2, MCM6, AURKA, BUB1, CCNB1, CDK1, BIRC5) [7]. All 10 genes are \emph{removed from the feature matrix before any split}, so the model can never memorize the label. All preprocessing lives inside scikit-learn Pipelines with nested cross-validation [8].
+\item \textbf{Feature selection.} Bootstrap-based \emph{StabilitySelector}: keep features in top-$K$ on $\geq 50\%$ of resamples [9]. Models: logistic regression, random forest, XGBoost, MLP. Cross-platform calibration: Platt / isotonic / quantile normalization (QN) / QN+Platt [10,11].
+\item \textbf{Validation layers.} Hold-out set, external TCGA + CPTAC, Ki-67 correlation, GDSC2 drug screen (295 drugs, Bonferroni-corrected) [12], synthetic 20-gene ground truth, survival/Cox with formal power analysis [13], LASSO minimal model [14].
+\end{itemize}
+
+\section*{Key Results}
+\begin{center}
+\begin{tabular}{lcccc}
+\toprule
+Cohort & $N$ & Platform & ROC-AUC & Accuracy \\
+\midrule
+GEO GSE39582 (hold-out) & 117 & Microarray & 0.985--0.991 & 0.897--0.927 \\
+TCGA-COAD & 322 & RNA-seq & 0.973 (RF) & 0.921 \\
+CPTAC-COAD & 105 & MS proteome & 0.949 (RF) & 0.868 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{itemize}\setlength\itemsep{1pt}
+\item \textbf{Ki-67 correlation (leakage-free):} model scores vs.\ MKI67 expression --- GEO $r=0.59$ ($p<10^{-55}$), TCGA $r=0.54$ ($p<10^{-25}$) --- the model infers proliferation from downstream biology it could not see.
+\item \textbf{Feature stability \& biology:} identical top-20 genes across all CV folds (MCM10, NCAPH, EXO1, \ldots); enrichment of DNA-replication and mitotic-spindle pathways. Top drugs from GDSC2: all MEK/ERK inhibitors (Trametinib $p=1.8\times10^{-12}$).
+\item \textbf{Synthetic ground truth:} 20/20 planted signal genes recovered (7.7$\times$ enrichment).
+\item \textbf{Minimal panel:} an 83-gene LASSO model matches the full 500-gene pipeline (AUC 0.985 vs.\ 0.983); most stable genes KIF23, DNA2, MCM3.
+\item \textbf{Survival:} high-proliferation class shorter overall survival (log-rank GEO $p=0.037$; TCGA $p=0.009$) but not independent of stage in Cox (HR = 0.84, $p=0.31$); cohorts adequately powered [13]. Effect size is large (Cohen's $d=2.3$), explaining the high AUCs.
+\end{itemize}
+
+\section*{Conclusions}
+Despite training exclusively on Affymetrix microarrays and holding out every label-defining gene, the classifier reaches ROC-AUC $>0.94$ on RNA-seq and proteomics cohorts, correlates with the clinical Ki-67 marker, and recovers biologically coherent genes and drug targets. Rigorous leakage prevention plus cross-platform calibration yields an objective, reproducible alternative to Ki-67 IHC that warrants prospective validation.
+
+\vspace{0.15cm}
+\hrule
+\vspace{0.1cm}
+{\scriptsize
+References: [1] Zeng et al.\ \emph{World J Clin Oncol} 2025. [2] Van Calster et al.\ \emph{BMC Med} 2019. [3] Marisa et al.\ \emph{PLoS Med} 2013. [4] TCGA Network \emph{Nature} 2012. [5] Vasaikar et al.\ \emph{Cell} 2019. [6] Smith et al.\ \emph{Gastroenterology} 2010. [7] Whitfield et al.\ \emph{Mol Biol Cell} 2002. [8] Pedregosa et al.\ \emph{JMLR} 2011. [9] Meinshausen \& B\"uhlmann \emph{JRSS-B} 2010. [10] Platt \emph{Advances in Large Margin Classifiers} 1999. [11] Niculescu-Mizil \& Caruana \emph{ICML} 2005. [12] Iorio et al.\ \emph{Cell} 2016; Yang et al.\ \emph{NAR} 2013. [13] Schoenfeld \emph{Biometrics} 1983. [14] Tibshirani \emph{JRSS-B} 1996. Code: github.com/Ronisnotasianfr/ColoGrowth-ML. Full manuscript, tables, and figures: Overleaf \emph{research\_paper}.}
+
+\end{document}

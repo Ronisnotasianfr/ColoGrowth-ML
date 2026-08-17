@@ -30,6 +30,21 @@ results/*.txt
 paper/*.pdf
 paper/*.docx
 
+# LaTeX source/auxiliary files
+*.ltx
+*.aux
+*.log
+*.out
+*.toc
+*.bbl
+*.blg
+*.nav
+*.snm
+*.vrb
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+
 # Agent / skill files (internal tooling, not project code)
 .agents/
 .opencode/
@@ -49,6 +64,19 @@ files/START_HERE_*
 files/SESSION_1_*
 files/email_*
 files/HOW_TO_USE_*
+
+# Obsidian vault state (local-only files)
+.obsidian/
+
+# Test caches
+.pytest_cache/
+
+# Compiled LaTeX output (reproducible from the .tex sources)
+overleaf/**/*.pdf
+overleaf/**/*_preview.png
+
+# Root-level generated figures (kept in overleaf/*/figures + results/*.csv)
+/figures/
 files/AGENT_MASTER_*
 files/Saindane_ColonCancer_Classifier_Summary.pdf
 files/RESEARCH_COMPLETION_*
