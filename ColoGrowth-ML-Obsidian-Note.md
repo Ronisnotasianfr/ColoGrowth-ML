@@ -7,7 +7,7 @@ tags:
   - colon-cancer
   - transcriptomics
   - science-fair
-date: 2026-08-15
+date: 2026-08-17
 source: README.md, NOTES.md, src/*, reproduce.sh
 ---
 
@@ -16,7 +16,7 @@ source: README.md, NOTES.md, src/*, reproduce.sh
 > [!info] One-liner
 > A leakage-free ML pipeline that **classifies colon cancer tumor proliferation status (High vs. Low)** from gene expression data, trained on GEO microarrays, validated across RNA-seq (TCGA) and proteomics (CPTAC) platforms, and tested for clinical relevance (survival, Ki-67, drug sensitivity).
 >
-> **Author:** Rohan Saindane (Ronisnotasianfr) — ScienceMontgomery 2025 / ISEF submission
+> **Author:** Rohan Saindane (Ronisnotasianfr) — ScienceMontgomery 2025
 > **Repo:** `github.com/Ronisnotasianfr/ColoGrowth-ML` · **License:** MIT · **Language:** Python 3.8–3.12 (4 models × 12 saved pipelines)
 
 ---
@@ -33,9 +33,8 @@ source: README.md, NOTES.md, src/*, reproduce.sh
 8. [How to Run (Reproduction)](#how-to-run-reproduction)
 9. [Key Results](#key-results)
 10. [Output Artifacts](#output-artifacts)
-11. [Competition Materials](#competition-materials)
-12. [Lessons Learned & Known Weaknesses](#lessons-learned--known-weaknesses)
-13. [Next Steps / Future Work](#next-steps--future-work)
+11. [Lessons Learned & Known Weaknesses](#lessons-learned--known-weaknesses)
+12. [Next Steps / Future Work](#next-steps--future-work)
 
 ---
 
@@ -49,7 +48,7 @@ A systematic benchmark evaluating **5 calibration methods** across **4 model cla
 - **External validation:** TCGA-COAD RNA-seq (n = 329), TCGA-READ (n = 105), CPTAC-COAD proteomics (n = 105)
 - **Clinical relevance tests:** Kaplan-Meier survival + log-rank, Ki-67 (MKI67) correlation, GDSC2 drug screen (295 drugs, Bonferroni-corrected)
 
-It grew out of a science-fair project (ScienceMontgomery) and was hardened into a peer-review-able manuscript (LaTeX/Word/PDF) with full reproducibility (Docker + `reproduce.sh`).
+It grew out of a science-fair project (ScienceMontgomery) and was hardened into a peer-review-able manuscript (LaTeX/PDF) with full reproducibility (Docker + `reproduce.sh`).
 
 ---
 
@@ -198,7 +197,7 @@ Metric: **ECE** (Expected Calibration Error) with 1000-bootstrap CIs, Brier scor
 - **StabilitySelector:** fit/transform correctness, selection-frequency output, and parallel (`n_jobs=-1`) vs. serial consistency.
 
 ### `notebooks/`
-Pipeline story in 4 notebooks (each with an `_executed` twin): `01_eda` → `02_preprocessing` → `03_model_training` → `04_evaluation`, plus `isef_submission.ipynb`.
+Pipeline story in 4 notebooks (each with an `_executed` twin): `01_eda` → `02_preprocessing` → `03_model_training` → `04_evaluation`.
 
 ### `paper/`
 Citation source only (all build scripts removed Aug 2026):
@@ -210,6 +209,7 @@ Definitive LaTeX deliverables, organized by artifact (each folder compiles stand
 - `research_paper/` — **flagship manuscript** (`main.tex`, 12pt article, natbib citations via `references.bib`, ~10 figures incl. Ki-67 correlation × 2 + feature-selection stability, LASSO + ablation + power sections)
 - `poster/` — 48×36in beamerposter (Problem, Pipeline, External Validation, Calibration Benchmark, Ablation, Survival, Drugs, Ki-67, References)
 - `one_page_summary/` — ScienceMontgomery handout (revised Aug 2026)
+- `synthica_submission/` — journal submission form rewrite (IEEEtran refs)
 - Deleted Aug 2026: `biorxiv/`, `synthica/` (old July-era manuscript variants), `nair_summary/`
 
 ### `poster/`
@@ -226,7 +226,8 @@ Every figure (PNG/PDF) + metric CSV from all analyses (60+ artifacts) — listed
 | `docker-compose.yml` | Builds image, mounts `./data ./models ./results ./paper` as volumes |
 | `requirements.txt` | 18 packages (scikit-learn, xgboost, shap, lifelines, gseapy, GEOparse, python-docx, reportlab…) |
 | `NOTES.md` | Personal log of struggles/lessons (summarized in [[#Lessons Learned & Known Weaknesses]]) |
-| `.backup_pre_competition/` | Pre-competition `.bak` snapshots of README, train.py, survival.py, paper scripts |
+| `files/` | Email drafts — mentor outreach (Dr. Nair reply, Ms. Yu) |
+| `.backup_pre_competition/` | Pre-competition `.bak` snapshots of README, train.py, survival.py, paper scripts (gitignored, local only) |
 
 ---
 
@@ -292,7 +293,6 @@ pytest tests/ -v
 - CPTAC proteomics: RF 0.949 AUC / 0.868 accuracy — works across *platforms AND data modalities*
 
 ### Biological / clinical validation
-### Biological / clinical validation
 - **Survival:** high-proliferation predicts worse OS — TCGA PanCancer log-rank p = 0.009, GEO GSE39582 p = 0.037, geo_pan p = 0.036
   - BUT: Cox PH adjusted for stage → HR = 0.84, p = 0.31 (proliferation adds no *independent* survival signal beyond staging; CPTAC too underpowered, 7 events)
   - Schoenfeld power analysis (9 cohorts): univariate tests adequately powered (79–194 events); CPTAC (7) & TCGA-READ (21) nulls are underpowered → don't over-interpret
@@ -315,18 +315,10 @@ pytest tests/ -v
 |---|---|
 | `results/` | ~60 files: ROC curves, calibration curves (per-model + ensemble), KM curves (geo, geo_pan, tcga, tcga_pan, tcga_read, cptac, synthetic, stage-stratified), Cox forest plot, DCA, SHAP summaries (LR/RF/XGB), confusion matrices, pathway enrichment, power analysis, sensitivity plots, drug sensitivity + p-value distribution, feature-selection stability, Ki-67 correlations, ablation study + all metric CSVs. **LASSO:** `lasso_minimal_model_geo_pan.csv`, `lasso_gene_stability_geo_pan.csv` (KIF23 1.0, DNA2 0.967, MCM3 0.967, DDIAS 0.933, SNRPB 0.9), `lasso_selected_genes_geo_pan.csv` |
 | `models/` | 12 `.joblib` pipelines (4 models × geo, geo_pan, synthetic) |
-| `overleaf/` | Research paper (natbib + references.bib), poster (beamerposter), one-page summary — each folder self-contained for Overleaf |
+| `overleaf/` | Research paper (natbib + references.bib), poster (beamerposter), one-page summary, synthica submission — each folder self-contained for Overleaf |
 | `data/processed/` | 38 CSVs — features, targets, proliferation scores, clinical per 8 datasets |
 | `data/raw/` | Downloaded GEO/TCGA/CPTAC raw inputs (gitignored) |
-| `files/` | ScienceMontgomery deliverables: QA prep, oral defense prep, poster PDF, email drafts (Dr. Nair reply w/ 3 proposed call times awaiting 8/17 call), PDF generator scripts (obsolete) |
-
----
-
-## Competition Materials
-
-- **ScienceMontgomery 2025** — competition poster (`SCIENCEMONTGOMERY_POSTER.md/pdf`), QA prep (`SCIENCEMONTGOMERY_QA_PREP.md`), `poster/` HTML version, judge demo script (`scripts/demo_predict.py`), oral defense prep (`ORAL_DEFENSE_PREP.md`)
-- **ISEF submission** — `notebooks/isef_submission.ipynb`
-- **Mentor outreach** — emails and one-page summaries for Dr. Nair (oncology mentor pipeline) and Ms. Yu
+| `files/` | Mentor email drafts only (Dr. Nair reply w/ proposed call times, Ms. Yu intro) — competition prep docs removed Aug 2026 |
 
 ---
 
@@ -350,13 +342,25 @@ pytest tests/ -v
 > [!warning] Download fragility
 > GEO FTP + Xena + CPTAC endpoints flake; a judge running `reproduce.sh` could fail on step 1. Should cache data / vendor archives.
 
+> [!note] Poster TeX fight
+> The beamerposter clipped content past the paper edge invisibly — "Overfull vbox" warnings were real clipping. Fixed by measuring column bottoms programmatically (PyMuPDF) and tuning figure widths; `\vspace*` between blocks, not `\vfill`.
+
+> [!note] Local LaTeX is possible on Windows
+> No MiKTeX, no tectonic wheels — but TinyTeX works (3 tries), plus `tlmgr install` for missing fonts (courier, times, helvetic, psnfss). Missing fonts and missing packages look identical on TinyTeX.
+
+> [!note] MCM6 vs MCM10 typo
+> Manuscript said MCM10 in one spot; code says MCM6. Diff the manuscript against the code, don't trust either alone. Same pass caught a name mismatch (Ronit vs Rohan) in an old citation.
+
 ---
 
 ## Next Steps / Future Work
 
-- [x] **Respond to Dr. Nair's microbiome pushback** — LASSO minimal model (83 genes, AUC 0.985) + Ki-67 correlation evidence; reply drafted, call proposed Mon 8/17 11am / Wed 8/19 2:30pm / Fri 8/21 10am ET (files/email_to_dr_nair_reply_draft.md)
+- [x] **Respond to Dr. Nair's microbiome pushback** — LASSO minimal model (83 genes, AUC 0.985) + Ki-67 correlation evidence; reply drafted, call Mon 8/17 11am / Wed 8/19 2:30pm / Fri 8/21 10am ET (files/email_to_dr_nair_reply_draft.md)
 - [x] **Definitive manuscript** — rewrite research_paper/main.tex with natbib + references.bib, add LASSO/ablation/power/Ki-67 sections; sync poster + one-page summary
-- [ ] **Compile on Overleaf** (no local LaTeX toolchain) — verify pdflatex + bibtex run clean
+- [x] **Local LaTeX toolchain** — TinyTeX installed; compile `overleaf/` locally instead of relying on Overleaf
+- [ ] **Stratify drug screen by KRAS/BRAF status** — MEK hits may be explained by KRAS mutation, not proliferation (cheapest fix, most likely to flip a conclusion)
+- [ ] Replace median-binarization with a **fixed threshold anchored to a reference cohort** (clinical claim shouldn't depend on whichever cohort computed the median)
+- [ ] **Single-sample scoring** — QN needs the whole batch; fix before anyone can deploy
 - [ ] Replace median-binarization with **continuous regression** (why throw away information?)
 - [ ] **Prospective validation with matched Ki-67 IHC** + RNA-seq (transcriptomic MKI67 correlation is strong but is not IHC)
 - [ ] Add a third-platform held-out cohort (nanostring or fresh proteomics)
