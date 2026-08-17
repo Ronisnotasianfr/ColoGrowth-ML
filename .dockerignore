@@ -1,0 +1,39 @@
+# VCS
+.git
+.gitignore
+
+# Agent / IDE tooling (not project code)
+.agents/
+.opencode/
+.claude/
+.obsidian/
+.idea/
+.vscode/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Python caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Local backups
+.backup_pre_competition/
+
+# Heavy/generated data — mounted as volumes or re-downloaded by reproduce.sh
+data/
+models/
+results/
+figures/
+paper/
+files/
+
+# Human-facing notebooks (not needed at runtime)
+notebooks/
+
+# Overleaf LaTeX sources — compile separately
+overleaf/
