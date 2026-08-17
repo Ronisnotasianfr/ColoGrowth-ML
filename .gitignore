@@ -65,6 +65,11 @@ files/SESSION_1_*
 files/email_*
 files/HOW_TO_USE_*
 
+# Competition prep documents (kept local only)
+files/ORAL_DEFENSE_PREP.md
+files/SCIENCEMONTGOMERY_POSTER.md
+files/SCIENCEMONTGOMERY_QA_PREP.md
+
 # Obsidian vault state (local-only files)
 .obsidian/
 
